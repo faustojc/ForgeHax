@@ -1,12 +1,5 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getLocalPlayer;
-import static com.matt.forgehax.Helper.getNetworkManager;
-import static com.matt.forgehax.Helper.getWorld;
-import static com.matt.forgehax.util.entity.EntityUtils.isAboveWater;
-import static com.matt.forgehax.util.entity.EntityUtils.isInWater;
-import static net.minecraft.util.math.RayTraceResult.Type;
-
 import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
@@ -22,16 +15,17 @@ import net.minecraft.util.math.Vec3d;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 
+import static com.matt.forgehax.Helper.*;
+import static com.matt.forgehax.util.entity.EntityUtils.isAboveWater;
+import static com.matt.forgehax.util.entity.EntityUtils.isInWater;
+import static net.minecraft.util.math.RayTraceResult.Type;
+
 /**
  * Created by Babbaj on 9/4/2017. TODO: check all 4 collision box corners
  */
 @RegisterMod
 public class AutoBucketFallMod extends ToggleMod {
-  
-  public AutoBucketFallMod() {
-    super(Category.PLAYER, "AutoBucket", false, "Automatically place bucket to reset fall damage");
-  }
-  
+
   public final Setting<Double> preHeight =
       getCommandStub()
           .builders()
@@ -48,9 +42,12 @@ public class AutoBucketFallMod extends ToggleMod {
           .description("minimum fall distance to work")
           .defaultTo(15D)
           .build();
-  
-  private ItemStack WATER_BUCKET = new ItemStack(Items.WATER_BUCKET);
-  
+  private final ItemStack WATER_BUCKET = new ItemStack(Items.WATER_BUCKET);
+
+  public AutoBucketFallMod() {
+    super(Category.PLAYER, "AutoBucket", false, "Automatically place bucket to reset fall damage");
+  }
+
   @SubscribeEvent
   public void onClientTick(TickEvent.ClientTickEvent event) {
     if (getLocalPlayer() == null
@@ -60,25 +57,26 @@ public class AutoBucketFallMod extends ToggleMod {
         || isAboveWater(getLocalPlayer())) {
       return;
     }
-    
+
     Vec3d playerPos = getLocalPlayer().getPositionVector();
     Vec3d rayTraceBucket = new Vec3d(playerPos.x, playerPos.y - 5, playerPos.z);
     Vec3d rayTracePre =
         new Vec3d(
             playerPos.x,
             playerPos.y - preHeight.getAsDouble(),
-            playerPos.z); // find the ground before the player is ready to water bucket
-    
+            playerPos.z
+        ); // find the ground before the player is ready to water bucket
+
     RayTraceResult result = MC.world.rayTraceBlocks(playerPos, rayTraceBucket, true);
     RayTraceResult resultPre = MC.world.rayTraceBlocks(playerPos, rayTracePre, true);
-    
+
     if (resultPre != null
         && resultPre.typeOfHit.equals(Type.BLOCK)
         && !(getWorld().getBlockState(resultPre.getBlockPos()).getBlock()
         instanceof BlockLiquid)) { // set the pitch early to not get cucked by ncp
       getLocalPlayer().prevRotationPitch = 90f;
       getLocalPlayer().rotationPitch = 90f;
-      
+
       int bucketSlot = findBucketHotbar();
       if (bucketSlot == -1) {
         bucketSlot = findBucketInv();
@@ -86,12 +84,13 @@ public class AutoBucketFallMod extends ToggleMod {
       if (bucketSlot > 8) {
         swap(
             bucketSlot,
-            getLocalPlayer().inventory.currentItem); // move bucket from inventory to hotbar
+            getLocalPlayer().inventory.currentItem
+        ); // move bucket from inventory to hotbar
       } else {
         MC.player.inventory.currentItem = bucketSlot;
       }
     }
-    
+
     if (result != null
         && result.typeOfHit.equals(Type.BLOCK)
         && !(getWorld().getBlockState(result.getBlockPos()).getBlock() instanceof BlockLiquid)) {
@@ -100,19 +99,20 @@ public class AutoBucketFallMod extends ToggleMod {
               new CPacketPlayer.Rotation(
                   getLocalPlayer().rotationYaw,
                   90,
-                  getLocalPlayer().onGround)); // probably unnecessary but doing it anyways
+                  getLocalPlayer().onGround
+              )); // probably unnecessary but doing it anyways
       getLocalPlayer().prevRotationPitch = 90f;
       getLocalPlayer().rotationPitch = 90f;
-      
+
       // printMessage("Attempted to place water bucket");
       MC.playerController.processRightClick(getLocalPlayer(), getWorld(), EnumHand.MAIN_HAND);
     }
   }
-  
+
   private int findBucketInv() {
     return getLocalPlayer().inventory.getSlotFor(WATER_BUCKET); // find bucket in entire inventory
   }
-  
+
   private int findBucketHotbar() {
     for (int i = 0; i < 9; i++) // iterate through hotbar slots
     {
@@ -122,13 +122,14 @@ public class AutoBucketFallMod extends ToggleMod {
     }
     return -1;
   }
-  
+
   private void swap(final int slot, final int hotbarNum) {
     MC.playerController.windowClick(
         getLocalPlayer().inventoryContainer.windowId,
         slot,
         hotbarNum,
         ClickType.SWAP,
-        getLocalPlayer());
+        getLocalPlayer()
+    );
   }
 }

@@ -1,7 +1,5 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getLocalPlayer;
-
 import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
@@ -10,9 +8,11 @@ import joptsimple.internal.Strings;
 import net.minecraftforge.client.event.ClientChatReceivedEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
+import static com.matt.forgehax.Helper.getLocalPlayer;
+
 @RegisterMod
 public class AutoReply extends ToggleMod {
-  
+
   public final Setting<String> reply =
       getCommandStub()
           .builders()
@@ -21,7 +21,7 @@ public class AutoReply extends ToggleMod {
           .description("Text to reply with")
           .defaultTo("fuck off newfag")
           .build();
-  
+
   public final Setting<String> mode =
       getCommandStub()
           .builders()
@@ -30,7 +30,7 @@ public class AutoReply extends ToggleMod {
           .description("Reply or chat")
           .defaultTo("REPLY")
           .build();
-  
+
   public final Setting<String> search =
       getCommandStub()
           .builders()
@@ -39,11 +39,11 @@ public class AutoReply extends ToggleMod {
           .description("Text to search for in message")
           .defaultTo("whispers: ")
           .build();
-  
+
   public AutoReply() {
     super(Category.MISC, "AutoReply", false, "Automatically talk in chat if finds a strings");
   }
-  
+
   @SubscribeEvent
   public void onClientChat(ClientChatReceivedEvent event) {
     String message = (event.getMessage().getUnformattedText());

@@ -16,13 +16,13 @@ import org.lwjgl.opengl.GL11;
 public class ChunkBorder extends ToggleMod {
 
 
-
   public ChunkBorder() {
     super(Category.RENDER, "ChunkBorder", false, "Shows a border at the border around the chunk you are in.");
   }
 
   /**
    * to draw the border
+   *
    * @param event
    */
   @SubscribeEvent

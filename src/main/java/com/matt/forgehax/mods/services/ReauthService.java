@@ -20,40 +20,37 @@ import static com.matt.forgehax.Helper.getLog;
 @RegisterMod
 public class ReauthService extends ToggleMod {
 
-  private final Setting<String> discordWebhookUrl =
-    getCommandStub()
-      .builders()
-      .<String>newSettingBuilder()
-      .name("webhook-url")
-      .description("The discord web-hook link to send notifications.")
-      .defaultTo("")
-      .build();
-
-  private final Setting<Boolean> sendDiscordMsgs =
-    getCommandStub()
-      .builders()
-      .<Boolean>newSettingBuilder()
-      .name("send-discord-msgs")
-      .description("Send discord notifications.")
-      .defaultTo(false)
-      .build();
-
   public final Setting<Integer> delay =
-    getCommandStub()
-      .builders()
-      .<Integer>newSettingBuilder()
-      .name("delay")
-      .description("Delay in ms between each auth attempt.")
-      .defaultTo(240000) // 4 minutes
-      .build();
+      getCommandStub()
+          .builders()
+          .<Integer>newSettingBuilder()
+          .name("delay")
+          .description("Delay in ms between each auth attempt.")
+          .defaultTo(240000) // 4 minutes
+          .build();
+  private final Setting<String> discordWebhookUrl =
+      getCommandStub()
+          .builders()
+          .<String>newSettingBuilder()
+          .name("webhook-url")
+          .description("The discord web-hook link to send notifications.")
+          .defaultTo("")
+          .build();
+  private final Setting<Boolean> sendDiscordMsgs =
+      getCommandStub()
+          .builders()
+          .<Boolean>newSettingBuilder()
+          .name("send-discord-msgs")
+          .description("Send discord notifications.")
+          .defaultTo(false)
+          .build();
+  private final SimpleTimer timer = new SimpleTimer();
+  boolean isSessionValid;
+  int counter;
 
   public ReauthService() {
     super(Category.MISC, "ReauthService", false, "Reauths on invalid session.");
   }
-
-  private final SimpleTimer timer = new SimpleTimer();
-  boolean isSessionValid;
-  int counter;
 
   @SubscribeEvent
   public void guiOpen(final GuiOpenEvent event) {

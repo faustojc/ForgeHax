@@ -1,9 +1,5 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getLocalPlayer;
-import static com.matt.forgehax.Helper.printError;
-import static com.matt.forgehax.asm.reflection.FastReflection.Fields.GuiDisconnected_message;
-
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -14,20 +10,6 @@ import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
 import com.mojang.authlib.GameProfile;
-import java.io.IOException;
-import java.security.KeyManagementException;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.X509Certificate;
-import java.util.Optional;
-import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLException;
-import javax.net.ssl.SSLSession;
-import javax.net.ssl.SSLSocket;
 import net.minecraft.client.gui.GuiDisconnected;
 import net.minecraft.network.play.server.SPacketChat;
 import net.minecraft.util.math.BlockPos;
@@ -53,11 +35,31 @@ import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import sun.security.validator.ValidatorException;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocket;
+import java.io.IOException;
+import java.security.KeyManagementException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.cert.X509Certificate;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+import static com.matt.forgehax.Helper.getLocalPlayer;
+import static com.matt.forgehax.Helper.printError;
+import static com.matt.forgehax.asm.reflection.FastReflection.Fields.GuiDisconnected_message;
+
 @RegisterMod
 public class MatrixNotifications extends ToggleMod {
-  
+
   private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor();
-  
+  private static final Registry<ConnectionSocketFactory> SOCKET_FACTORY_REGISTRY;
+
   static {
     Runtime.getRuntime().addShutdownHook(new Thread(() -> {
       EXECUTOR.shutdown();
@@ -70,17 +72,17 @@ public class MatrixNotifications extends ToggleMod {
       }
     }));
   }
-  
-  private static final Registry<ConnectionSocketFactory> SOCKET_FACTORY_REGISTRY;
-  
+
   static {
     Registry<ConnectionSocketFactory> sf = null;
     try {
       SSLContextBuilder builder = SSLContexts.custom();
       builder.loadTrustMaterial(null, (chain, authType) -> true);
       SSLContext sslContext = builder.build();
-      SSLConnectionSocketFactory sslsf = new SSLConnectionSocketFactory(sslContext,
-          new AllowAllHostsVerifier());
+      SSLConnectionSocketFactory sslsf = new SSLConnectionSocketFactory(
+          sslContext,
+          new AllowAllHostsVerifier()
+      );
       sf = RegistryBuilder.<ConnectionSocketFactory>create().register("https", sslsf).build();
     } catch (NoSuchAlgorithmException | KeyStoreException | KeyManagementException e) {
       e.printStackTrace();
@@ -88,7 +90,7 @@ public class MatrixNotifications extends ToggleMod {
       SOCKET_FACTORY_REGISTRY = sf;
     }
   }
-  
+
   private final Setting<String> url =
       getCommandStub()
           .builders()
@@ -97,7 +99,7 @@ public class MatrixNotifications extends ToggleMod {
           .description("URL to the Matrix web hook")
           .defaultTo("")
           .build();
-  
+
   private final Setting<String> user =
       getCommandStub()
           .builders()
@@ -106,7 +108,7 @@ public class MatrixNotifications extends ToggleMod {
           .description("User to ping for high priority messages")
           .defaultTo("")
           .build();
-  
+
   private final Setting<String> skin_server_url =
       getCommandStub()
           .builders()
@@ -115,7 +117,7 @@ public class MatrixNotifications extends ToggleMod {
           .description("URL to the skin server. If left empty then no image will be used.")
           .defaultTo("https://visage.surgeplay.com/face/160/")
           .build();
-  
+
   private final Setting<Integer> queue_notify_pos =
       getCommandStub()
           .builders()
@@ -124,7 +126,7 @@ public class MatrixNotifications extends ToggleMod {
           .description("Position to start sending notifications at")
           .defaultTo(5)
           .build();
-  
+
   private final Setting<Boolean> on_connected =
       getCommandStub()
           .builders()
@@ -133,7 +135,7 @@ public class MatrixNotifications extends ToggleMod {
           .description("Message on connected to server")
           .defaultTo(true)
           .build();
-  
+
   private final Setting<Boolean> on_disconnected =
       getCommandStub()
           .builders()
@@ -142,7 +144,7 @@ public class MatrixNotifications extends ToggleMod {
           .description("Message on disconnected from server")
           .defaultTo(true)
           .build();
-  
+
   private final Setting<Boolean> on_queue_move =
       getCommandStub()
           .builders()
@@ -151,34 +153,33 @@ public class MatrixNotifications extends ToggleMod {
           .description("Message when player moves in the queue")
           .defaultTo(true)
           .build();
-  
-  public MatrixNotifications() {
-    super(Category.MISC, "MatrixNotifications", false, "Matrix notifications");
-  }
-  
   private boolean joined = false;
   private boolean once = false;
   private int position = 0;
   private String serverName = null;
-  
+
+  public MatrixNotifications() {
+    super(Category.MISC, "MatrixNotifications", false, "Matrix notifications");
+  }
+
   private static CloseableHttpClient createHttpClient() {
     final RequestConfig req = RequestConfig.custom()
-        .setConnectTimeout(30 * 1000)
-        .setConnectionRequestTimeout(30 * 1000)
-        .build();
-    
+                                           .setConnectTimeout(30 * 1000)
+                                           .setConnectionRequestTimeout(30 * 1000)
+                                           .build();
+
     if (SOCKET_FACTORY_REGISTRY == null) {
       return HttpClientBuilder.create()
-          .setDefaultRequestConfig(req)
-          .build();
+                              .setDefaultRequestConfig(req)
+                              .build();
     } else {
       return HttpClients.custom()
-          .setDefaultRequestConfig(req)
-          .setConnectionManager(new PoolingHttpClientConnectionManager(SOCKET_FACTORY_REGISTRY))
-          .build();
+                        .setDefaultRequestConfig(req)
+                        .setConnectionManager(new PoolingHttpClientConnectionManager(SOCKET_FACTORY_REGISTRY))
+                        .build();
     }
   }
-  
+
   private static HttpResponse post(final String url, final JsonElement json) throws IOException {
     final Gson gson = new Gson();
     try (CloseableHttpClient client = createHttpClient()) {
@@ -189,7 +190,7 @@ public class MatrixNotifications extends ToggleMod {
       return client.execute(post);
     }
   }
-  
+
   private static void postAsync(final String url, final JsonElement json) {
     EXECUTOR.submit(() -> {
       try {
@@ -207,39 +208,39 @@ public class MatrixNotifications extends ToggleMod {
       }
     });
   }
-  
+
   private static String getServerName() {
     return Optional.ofNullable(MC.getCurrentServerData())
-        .map(data -> data.serverName)
-        .orElse("server");
+                   .map(data -> data.serverName)
+                   .orElse("server");
   }
-  
+
   private static String getUriUuid() {
     return Optional.of(MC.getSession().getProfile())
-        .map(GameProfile::getId)
-        .map(UUID::toString)
-        .map(id -> id.replaceAll("-", ""))
-        .orElse(null);
+                   .map(GameProfile::getId)
+                   .map(UUID::toString)
+                   .map(id -> id.replaceAll("-", ""))
+                   .orElse(null);
   }
-  
+
   private void notify(String message) {
     JsonObject object = new JsonObject();
     object.addProperty("text", message);
     object.addProperty("format", "plain");
     object.addProperty("displayName", MC.getSession().getUsername());
-    
+
     String id = getUriUuid();
     if (!skin_server_url.get().isEmpty() && id != null) {
       object.addProperty("avatarUrl", skin_server_url.get() + id);
     }
-    
+
     postAsync(url.get(), object);
   }
-  
+
   private void notify(String message, Object... args) {
     notify(String.format(message, args));
   }
-  
+
   private void ping(String message, Object... args) {
     String msg = String.format(message, args);
     if (user.get().isEmpty()) {
@@ -248,29 +249,29 @@ public class MatrixNotifications extends ToggleMod {
       notify("@" + user.get() + " " + msg);
     }
   }
-  
+
   @Override
   protected void onEnabled() {
     joined = once = false;
     position = 0;
-    
+
     if (url.get().isEmpty()) {
       printError("Missing url");
     }
-    
+
     if (SOCKET_FACTORY_REGISTRY == null) {
       printError(
           "Custom socket factory has not been registered. All host SSL certificates must be trusted with the current JRE");
     }
   }
-  
+
   @SubscribeEvent
   public void onTick(LocalPlayerUpdateEvent event) {
     joined = true;
-    
+
     if (!once) {
       once = true;
-      
+
       if (on_connected.get()) {
         BlockPos pos = getLocalPlayer().getPosition();
         if (pos.getX() != 0 && pos.getZ() != 0) {
@@ -281,26 +282,26 @@ public class MatrixNotifications extends ToggleMod {
       }
     }
   }
-  
+
   @SubscribeEvent
   public void onWorldUnload(WorldEvent.Unload event) {
     once = false;
     position = 0;
-    
+
     if (MC.getCurrentServerData() != null) {
       serverName = getServerName();
     }
   }
-  
+
   @SubscribeEvent
   public void onGuiOpened(GuiOpenEvent event) {
     if (event.getGui() instanceof GuiDisconnected && joined) {
       joined = false;
-      
+
       if (on_disconnected.get()) {
         String reason = Optional.ofNullable(GuiDisconnected_message.get(event.getGui()))
-            .map(ITextComponent::getUnformattedText)
-            .orElse("");
+                                .map(ITextComponent::getUnformattedText)
+                                .orElse("");
         if (reason.isEmpty()) {
           notify("Disconnected from %s", serverName);
         } else {
@@ -309,7 +310,7 @@ public class MatrixNotifications extends ToggleMod {
       }
     }
   }
-  
+
   @SubscribeEvent
   public void onPacketRecieve(PacketEvent.Incoming.Pre event) {
     if (event.getPacket() instanceof SPacketChat) {
@@ -339,21 +340,21 @@ public class MatrixNotifications extends ToggleMod {
       }
     }
   }
-  
+
   private static class AllowAllHostsVerifier implements X509HostnameVerifier {
-    
+
     @Override
     public void verify(String host, SSLSocket ssl) throws IOException {
     }
-    
+
     @Override
     public void verify(String host, X509Certificate cert) throws SSLException {
     }
-    
+
     @Override
     public void verify(String host, String[] cns, String[] subjectAlts) throws SSLException {
     }
-    
+
     @Override
     public boolean verify(String s, SSLSession sslSession) {
       return true;

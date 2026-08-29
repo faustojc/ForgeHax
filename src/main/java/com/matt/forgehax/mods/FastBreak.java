@@ -9,11 +9,11 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
 @RegisterMod
 public class FastBreak extends ToggleMod {
-  
+
   public FastBreak() {
     super(Category.PLAYER, "FastBreak", false, "Fast break retard");
   }
-  
+
   @SubscribeEvent
   public void onUpdate(LocalPlayerUpdateEvent event) {
     if (MC.playerController != null) {

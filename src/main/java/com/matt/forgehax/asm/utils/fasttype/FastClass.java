@@ -8,11 +8,11 @@ import com.matt.forgehax.asm.utils.name.IName;
  * Created on 7/6/2017 by fr1kin
  */
 public class FastClass extends FastType<Class<?>> {
-  
+
   public FastClass(IName<String> name) {
     super(null, name);
   }
-  
+
   public Class<?> getClassHandle() {
     try {
       if (attemptLookup()) {
@@ -25,10 +25,10 @@ public class FastClass extends FastType<Class<?>> {
     }
     return null;
   }
-  
+
   @Override
   protected Class<?> lookup() throws Exception {
     return Class.forName(
-      name.getByStateSafe(RuntimeState.getState()), false, getClass().getClassLoader());
+        name.getByStateSafe(RuntimeState.getState()), false, getClass().getClassLoader());
   }
 }

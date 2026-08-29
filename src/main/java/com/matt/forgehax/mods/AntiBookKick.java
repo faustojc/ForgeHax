@@ -29,7 +29,7 @@ public class AntiBookKick extends ToggleMod {
     }
 
     final CPacketClickWindow packet = event.getPacket();
-    if(!(packet.getClickedItem().getItem() instanceof ItemWrittenBook)) {
+    if (!(packet.getClickedItem().getItem() instanceof ItemWrittenBook)) {
       return;
     }
 

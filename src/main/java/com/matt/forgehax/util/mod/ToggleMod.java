@@ -5,9 +5,9 @@ import com.matt.forgehax.util.command.StubBuilder;
 import com.matt.forgehax.util.command.callbacks.CallbackData;
 
 public class ToggleMod extends BaseMod {
-  
+
   private final Setting<Boolean> enabled;
-  
+
   public ToggleMod(Category category, String modName, boolean defaultValue, String description) {
     super(category, modName, description);
     this.enabled =
@@ -28,7 +28,7 @@ public class ToggleMod extends BaseMod {
                 })
             .build();
   }
-  
+
   /**
    * Toggle mod to be on/off
    */
@@ -39,32 +39,27 @@ public class ToggleMod extends BaseMod {
       enable();
     }
   }
-  
+
   @Override
   public void enable() {
     enabled.set(true);
   }
-  
+
   @Override
   public void disable() {
     enabled.set(false);
   }
-  
+
   @Override
   protected StubBuilder buildStubCommand(StubBuilder builder) {
     return builder.kpressed(this::onBindPressed).kdown(this::onBindKeyDown).bind();
   }
-  
-  @Override
-  public String getDebugDisplayText() {
-    return super.getDebugDisplayText();
-  }
-  
+
   @Override
   public boolean isHidden() {
     return false;
   }
-  
+
   /**
    * Check if the mod is currently enabled
    */
@@ -72,23 +67,23 @@ public class ToggleMod extends BaseMod {
   public final boolean isEnabled() {
     return enabled.get();
   }
-  
+
   @Override
   protected void onLoad() {
   }
-  
+
   @Override
   protected void onUnload() {
   }
-  
+
   @Override
   protected void onEnabled() {
   }
-  
+
   @Override
   protected void onDisabled() {
   }
-  
+
   /**
    * Toggles the mod
    */
@@ -96,8 +91,13 @@ public class ToggleMod extends BaseMod {
   public void onBindPressed(CallbackData cb) {
     toggle();
   }
-  
+
   @Override
   protected void onBindKeyDown(CallbackData cb) {
+  }
+
+  @Override
+  public String getDebugDisplayText() {
+    return super.getDebugDisplayText();
   }
 }

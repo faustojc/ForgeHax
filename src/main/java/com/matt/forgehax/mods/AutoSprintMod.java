@@ -1,7 +1,5 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getLocalPlayer;
-
 import com.matt.forgehax.events.LocalPlayerUpdateEvent;
 import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.key.Bindings;
@@ -10,16 +8,11 @@ import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
+import static com.matt.forgehax.Helper.getLocalPlayer;
+
 @RegisterMod
 public class AutoSprintMod extends ToggleMod {
-  
-  private boolean isBound = false;
-  
-  enum Modes {
-    ALWAYS,
-    LEGIT
-  }
-  
+
   public final Setting<Modes> mode =
       getCommandStub()
           .builders()
@@ -28,11 +21,12 @@ public class AutoSprintMod extends ToggleMod {
           .description("Sprint mode")
           .defaultTo(Modes.ALWAYS)
           .build();
-  
+  private boolean isBound = false;
+
   public AutoSprintMod() {
     super(Category.PLAYER, "AutoSprint", false, "Automatically sprints");
   }
-  
+
   private void startSprinting() {
     switch (mode.get()) {
       case ALWAYS:
@@ -52,7 +46,7 @@ public class AutoSprintMod extends ToggleMod {
         break;
     }
   }
-  
+
   private void stopSprinting() {
     if (isBound) {
       Bindings.sprint.setPressed(false);
@@ -60,7 +54,7 @@ public class AutoSprintMod extends ToggleMod {
       isBound = false;
     }
   }
-  
+
   /**
    * Stop sprinting when the mod is disabled
    */
@@ -68,7 +62,7 @@ public class AutoSprintMod extends ToggleMod {
   public void onDisabled() {
     stopSprinting();
   }
-  
+
   /**
    * Start sprinting every update tick
    */
@@ -79,5 +73,10 @@ public class AutoSprintMod extends ToggleMod {
         && !event.getEntityLiving().isSneaking()) {
       startSprinting();
     }
+  }
+
+  enum Modes {
+    ALWAYS,
+    LEGIT
   }
 }

@@ -12,11 +12,11 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
  */
 @RegisterMod
 public class PigmenAngerCooldownService extends ServiceMod {
-  
+
   public PigmenAngerCooldownService() {
     super("PigmenAngerCooldownService");
   }
-  
+
   @SubscribeEvent
   public void onUpdate(LivingEvent.LivingUpdateEvent event) {
     if (event.getEntityLiving() instanceof EntityPigZombie) {

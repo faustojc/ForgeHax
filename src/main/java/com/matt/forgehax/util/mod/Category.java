@@ -12,19 +12,19 @@ public enum Category {
   MISC("Misc", "Miscellaneous"),
   SERVICE("Service", "Background mods"),
   ;
-  
-  private String prettyName;
-  private String description;
-  
+
+  private final String prettyName;
+  private final String description;
+
   Category(String prettyName, String description) {
     this.prettyName = prettyName;
     this.description = description;
   }
-  
+
   public String getPrettyName() {
     return prettyName;
   }
-  
+
   public String getDescription() {
     return description;
   }

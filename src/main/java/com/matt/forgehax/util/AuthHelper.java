@@ -35,35 +35,12 @@ import static com.matt.forgehax.mods.managers.AccountManager.masterPassword;
  */
 public final class AuthHelper extends YggdrasilUserAuthentication {
 
-  private final YggdrasilAuthenticationService authService;
   public static final File directory = FileManager.getInstance().getMkBaseDirectory("/config/SavedAccounts").toFile();
+  private final YggdrasilAuthenticationService authService;
 
   public AuthHelper() {
     super(new YggdrasilAuthenticationService(MC.getProxy(), null), Agent.MINECRAFT);
     authService = new YggdrasilAuthenticationService(MC.getProxy(), UUID.randomUUID().toString());
-  }
-
-  @Override
-  public YggdrasilAuthenticationService getAuthenticationService() {
-    return authService;
-  }
-
-  public void setSession(Session s) {
-    FastReflection.Fields.Minecraft_session.set(MC, s);
-  }
-
-  public void newLogin(String login, String password) throws AuthenticationException {
-    setUsername(login);
-    setPassword(password);
-
-    // For new client token.
-    logInWithPassword();
-    Session newSession = new Session(getSelectedProfile().getName(),
-      UUIDTypeAdapter.fromUUID(getSelectedProfile().getId()), getAuthenticatedToken(), getUserType().getName());
-
-    newSession.setProperties(getUserProperties());
-    logOut();
-    setSession(newSession);
   }
 
   public static String encrypt(String encryptString, String iv, String key, String keySalt) {
@@ -80,7 +57,7 @@ public final class AuthHelper extends YggdrasilUserAuthentication {
       return Base64.getEncoder().encodeToString(cipher.doFinal(encryptString.getBytes(StandardCharsets.UTF_8)));
     } catch (Exception e) {
       e.printStackTrace();
-      getLog().error("Encryption error: " + e.toString());
+      getLog().error("Encryption error: " + e);
     }
 
     return null;
@@ -100,7 +77,7 @@ public final class AuthHelper extends YggdrasilUserAuthentication {
       return new String(cipher.doFinal(Base64.getDecoder().decode(decryptString.getBytes(StandardCharsets.UTF_8))));
     } catch (Exception e) {
       e.printStackTrace();
-      getLog().error("Decryption error: " + e.toString());
+      getLog().error("Decryption error: " + e);
     }
 
     return null;
@@ -141,5 +118,30 @@ public final class AuthHelper extends YggdrasilUserAuthentication {
     fileReader.close();
 
     return object.get("iv").getAsString();
+  }
+
+  @Override
+  public YggdrasilAuthenticationService getAuthenticationService() {
+    return authService;
+  }
+
+  public void setSession(Session s) {
+    FastReflection.Fields.Minecraft_session.set(MC, s);
+  }
+
+  public void newLogin(String login, String password) throws AuthenticationException {
+    setUsername(login);
+    setPassword(password);
+
+    // For new client token.
+    logInWithPassword();
+    Session newSession = new Session(
+        getSelectedProfile().getName(),
+        UUIDTypeAdapter.fromUUID(getSelectedProfile().getId()), getAuthenticatedToken(), getUserType().getName()
+    );
+
+    newSession.setProperties(getUserProperties());
+    logOut();
+    setSession(newSession);
   }
 }

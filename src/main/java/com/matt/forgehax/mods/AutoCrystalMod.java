@@ -1,16 +1,11 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getLocalPlayer;
-import static com.matt.forgehax.Helper.getNetworkManager;
-import static com.matt.forgehax.Helper.getWorld;
-
 import com.matt.forgehax.events.LocalPlayerUpdateEvent;
 import com.matt.forgehax.util.SimpleTimer;
 import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import java.util.function.Predicate;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.item.EntityEnderCrystal;
 import net.minecraft.entity.player.EntityPlayer;
@@ -21,12 +16,16 @@ import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.Vec3d;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
+import java.util.function.Predicate;
+
+import static com.matt.forgehax.Helper.*;
+
 /**
  * Created on 3/12/2018 by exkerbinator
  */
 @RegisterMod
 public class AutoCrystalMod extends ToggleMod {
-  
+
   public final Setting<Float> maxDistance =
       getCommandStub()
           .builders()
@@ -36,7 +35,7 @@ public class AutoCrystalMod extends ToggleMod {
           .defaultTo(3f)
           .min(0f)
           .build();
-  
+
   public final Setting<Float> minDistance =
       getCommandStub()
           .builders()
@@ -46,7 +45,7 @@ public class AutoCrystalMod extends ToggleMod {
           .defaultTo(0f)
           .min(0f)
           .build();
-  
+
   public final Setting<Float> minHeight =
       getCommandStub()
           .builders()
@@ -55,7 +54,7 @@ public class AutoCrystalMod extends ToggleMod {
           .description("detonate crystals with a relative y coord greater than this value")
           .defaultTo(-5f)
           .build();
-  
+
   public final Setting<Integer> delay =
       getCommandStub()
           .builders()
@@ -65,7 +64,7 @@ public class AutoCrystalMod extends ToggleMod {
           .defaultTo(10)
           .min(0)
           .build();
-  
+
   public final Setting<Boolean> checkEnemy =
       getCommandStub()
           .builders()
@@ -74,7 +73,7 @@ public class AutoCrystalMod extends ToggleMod {
           .description("only detonate crystals close to enemy players")
           .defaultTo(true)
           .build();
-  
+
   public final Setting<Float> maxEnemyDistance =
       getCommandStub()
           .builders()
@@ -84,22 +83,21 @@ public class AutoCrystalMod extends ToggleMod {
           .defaultTo(10f)
           .min(0f)
           .build();
-  
+  private final SimpleTimer timer = new SimpleTimer();
+
   public AutoCrystalMod() {
     super(Category.COMBAT, "AutoCrystal", false, "Automatically detonates nearby end crystals");
   }
-  
-  private SimpleTimer timer = new SimpleTimer();
-  
+
   @Override
   public void onEnabled() {
     timer.start();
   }
-  
+
   private Predicate<Entity> playerWithinDistance(float dist) {
     return k -> getLocalPlayer().getDistanceSq(k) < dist * dist;
   }
-  
+
   private boolean enemyWithinDistance(Entity e, float dist) {
     Vec3d delta = new Vec3d(dist, dist, dist);
     AxisAlignedBB bb =
@@ -110,7 +108,7 @@ public class AutoCrystalMod extends ToggleMod {
         .filter(p -> !p.isEntityEqual(getLocalPlayer()))
         .anyMatch(p -> e.getDistanceSq(p) < dist * dist);
   }
-  
+
   @SubscribeEvent
   public void onTick(LocalPlayerUpdateEvent event) {
     if (getWorld() != null && getLocalPlayer() != null) {
@@ -118,12 +116,13 @@ public class AutoCrystalMod extends ToggleMod {
       if (!timer.hasTimeElapsed(delay.get())) {
         return;
       }
-      
+
       Vec3d delta = new Vec3d(maxDistance.get(), maxDistance.get(), maxDistance.get());
       AxisAlignedBB bb =
           new AxisAlignedBB(
               getLocalPlayer().getPositionVector().subtract(delta),
-              getLocalPlayer().getPositionVector().add(delta));
+              getLocalPlayer().getPositionVector().add(delta)
+          );
       getWorld()
           .getEntitiesWithinAABB(EntityEnderCrystal.class, bb)
           .stream()

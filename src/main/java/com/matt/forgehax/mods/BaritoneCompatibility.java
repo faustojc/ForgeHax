@@ -1,7 +1,5 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getLocalPlayer;
-
 import com.matt.forgehax.events.ForgeHaxEvent;
 import com.matt.forgehax.events.LocalPlayerUpdateEvent;
 import com.matt.forgehax.util.command.Setting;
@@ -12,9 +10,11 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
+import static com.matt.forgehax.Helper.getLocalPlayer;
+
 @RegisterMod
 public class BaritoneCompatibility extends ToggleMod {
-  
+
   private final Setting<String> on_string =
       getCommandStub()
           .builders()
@@ -23,7 +23,7 @@ public class BaritoneCompatibility extends ToggleMod {
           .description("Message to enable baritone")
           .defaultTo("#mine diamond_ore")
           .build();
-  
+
   private final Setting<String> off_string =
       getCommandStub()
           .builders()
@@ -32,34 +32,33 @@ public class BaritoneCompatibility extends ToggleMod {
           .description("Message to disable baritone")
           .defaultTo("#stop")
           .build();
-  
+  private boolean off = false;
+  private boolean once = false;
+
   public BaritoneCompatibility() {
     super(Category.MISC, "BaritoneCompatibility", false, "the lazy compatibility mod");
   }
-  
-  private boolean off = false;
-  private boolean once = false;
-  
+
   private void turnOn() {
     off = false;
     getLocalPlayer().sendChatMessage(on_string.get());
   }
-  
+
   private void turnOff() {
     off = true;
     getLocalPlayer().sendChatMessage(off_string.get());
   }
-  
+
   @Override
   protected void onDisabled() {
     off = once = false;
   }
-  
+
   @SubscribeEvent
   public void onWorldUnload(WorldEvent.Unload event) {
     onDisabled();
   }
-  
+
   @SubscribeEvent
   public void onTick(LocalPlayerUpdateEvent event) {
     if (!once) {
@@ -70,13 +69,13 @@ public class BaritoneCompatibility extends ToggleMod {
       }
     }
   }
-  
+
   @SubscribeEvent
   public void onEvent(ForgeHaxEvent event) {
     if (getLocalPlayer() == null) {
       return;
     }
-    
+
     switch (event.getType()) {
       case EATING_START:
       case EATING_SELECT_FOOD: {

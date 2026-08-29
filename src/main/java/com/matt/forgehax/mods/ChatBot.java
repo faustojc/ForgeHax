@@ -1,7 +1,5 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getFileManager;
-
 import com.google.common.collect.Sets;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -24,16 +22,19 @@ import com.matt.forgehax.util.spam.SpamEntry;
 import com.matt.forgehax.util.spam.SpamMessage;
 import com.matt.forgehax.util.spam.SpamTokens;
 import com.matt.forgehax.util.spam.SpamTrigger;
+import joptsimple.internal.Strings;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.Scanner;
-import joptsimple.internal.Strings;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+
+import static com.matt.forgehax.Helper.getFileManager;
 
 @RegisterMod
 public class ChatBot extends ToggleMod {
-  
+
   private final Options<SpamEntry> spams =
       getCommandStub()
           .builders()
@@ -43,7 +44,7 @@ public class ChatBot extends ToggleMod {
           .factory(SpamEntry::new)
           .supplier(Sets::newConcurrentHashSet)
           .build();
-  
+
   private final Setting<Integer> max_input_length =
       getCommandStub()
           .builders()
@@ -54,7 +55,7 @@ public class ChatBot extends ToggleMod {
           .min(0)
           .max(256)
           .build();
-  
+
   private final Setting<Boolean> resetSequentialIndex =
       getCommandStub()
           .builders()
@@ -63,20 +64,11 @@ public class ChatBot extends ToggleMod {
           .description("start spam list anew in sequential mode")
           .defaultTo(false)
           .build();
-  
+
   public ChatBot() {
     super(Category.MISC, "ChatBot", false, "Spam chat");
   }
-  
-  @Override
-  protected void onDisabled() {
-    if (resetSequentialIndex.get()) {
-      for (SpamEntry e : spams) {
-        e.reset();
-      }
-    }
-  }
-  
+
   @Override
   protected void onLoad() {
     spams
@@ -91,7 +83,8 @@ public class ChatBot extends ToggleMod {
               parser
                   .accepts(
                       "trigger",
-                      "How the spam will be triggered (spam, reply, reply_with_input, player_connect, player_disconnect)")
+                      "How the spam will be triggered (spam, reply, reply_with_input, player_connect, player_disconnect)"
+                  )
                   .withRequiredArg();
               parser.accepts("enabled", "Enabled").withRequiredArg();
               parser
@@ -102,21 +95,21 @@ public class ChatBot extends ToggleMod {
             data -> {
               data.requiredArguments(1);
               String name = data.getArgumentAsString(0);
-              
+
               boolean givenInput =
                   data.hasOption("keyword")
                       || data.hasOption("type")
                       || data.hasOption("trigger")
                       || data.hasOption("enabled")
                       || data.hasOption("delay");
-              
+
               SpamEntry entry = spams.get(name);
               if (entry == null) {
                 entry = new SpamEntry(name);
                 spams.add(entry);
                 data.write("Added new entry \"" + name + "\"");
               }
-              
+
               if (data.hasOption("keyword")) {
                 entry.setKeyword(data.getOptionAsString("keyword"));
               }
@@ -135,13 +128,13 @@ public class ChatBot extends ToggleMod {
               if (data.hasOption("delay")) {
                 entry.setDelay(SafeConverter.toLong(data.getOptionAsString("delay")));
               }
-              
+
               if (data.getArgumentCount() == 2) {
                 String msg = data.getArgumentAsString(1);
                 entry.add(msg);
                 data.write("Added message \"" + msg + "\"");
               }
-              
+
               if (givenInput) {
                 data.write("keyword=" + entry.getKeyword());
                 data.write("type=" + entry.getType().name());
@@ -149,12 +142,12 @@ public class ChatBot extends ToggleMod {
                 data.write("enabled=" + entry.isEnabled());
                 data.write("delay=" + entry.getDelay());
               }
-              
+
               data.markSuccess();
             })
         .success(e -> spams.serialize())
         .build();
-    
+
     spams
         .builders()
         .newCommandBuilder()
@@ -165,14 +158,14 @@ public class ChatBot extends ToggleMod {
               data.requiredArguments(2);
               String name = data.getArgumentAsString(0);
               String fileN = data.getArgumentAsString(1);
-              
+
               SpamEntry entry = spams.get(name);
               if (entry == null) {
                 entry = new SpamEntry(name);
                 spams.add(entry);
                 data.write("Added new entry \"" + name + "\"");
               }
-              
+
               Path file = getFileManager().getBaseResolve(fileN);
               if (Files.exists(file)) {
                 if (fileN.endsWith(".json")) {
@@ -221,7 +214,7 @@ public class ChatBot extends ToggleMod {
             })
         .success(e -> spams.serialize())
         .build();
-    
+
     spams
         .builders()
         .newCommandBuilder()
@@ -232,24 +225,24 @@ public class ChatBot extends ToggleMod {
               data.requiredArguments(2);
               String name = data.getArgumentAsString(0);
               String fileN = data.getArgumentAsString(1);
-              
+
               SpamEntry entry = spams.get(name);
               if (entry == null) {
                 data.write("No such entry: " + name);
                 return;
               }
-              
+
               if (!fileN.endsWith(".json") && !fileN.endsWith(".txt")) {
                 fileN += ".txt";
               }
-              
+
               Path file = getFileManager().getBaseResolve(fileN);
-              
+
               try {
                 if (!Files.isDirectory(file.getParent())) {
                   Files.createDirectories(file.getParent());
                 }
-                
+
                 if (name.endsWith(".json")) {
                   final JsonArray head = new JsonArray();
                   entry.getMessages().forEach(str -> head.add(new JsonPrimitive(str)));
@@ -271,7 +264,7 @@ public class ChatBot extends ToggleMod {
               }
             })
         .build();
-    
+
     spams
         .builders()
         .newCommandBuilder()
@@ -281,7 +274,7 @@ public class ChatBot extends ToggleMod {
             data -> {
               data.requiredArguments(1);
               String name = data.getArgumentAsString(0);
-              
+
               SpamEntry entry = spams.get(name);
               if (entry != null) {
                 spams.remove(entry);
@@ -294,7 +287,7 @@ public class ChatBot extends ToggleMod {
             })
         .success(e -> spams.serialize())
         .build();
-    
+
     spams
         .builders()
         .newCommandBuilder()
@@ -316,7 +309,16 @@ public class ChatBot extends ToggleMod {
             })
         .build();
   }
-  
+
+  @Override
+  protected void onDisabled() {
+    if (resetSequentialIndex.get()) {
+      for (SpamEntry e : spams) {
+        e.reset();
+      }
+    }
+  }
+
   @SubscribeEvent
   public void onTick(LocalPlayerUpdateEvent event) {
     if (SpamService.isEmpty() && !spams.isEmpty()) {
@@ -328,19 +330,20 @@ public class ChatBot extends ToggleMod {
                   "SPAM" + e.getName(),
                   e.getDelay(),
                   "self" + e.getName().toLowerCase(),
-                  PriorityEnum.DEFAULT));
+                  PriorityEnum.DEFAULT
+              ));
           return;
         }
       }
     }
   }
-  
+
   @SubscribeEvent
   public void onChat(ChatMessageEvent event) {
     if (event.getSender().isLocalPlayer()) {
       return;
     }
-    
+
     String[] args = event.getMessage().split(" ");
     final String sender = event.getSender().getId().toString();
     final String keyword = ArrayHelper.getOrDefault(args, 0, Strings.EMPTY);
@@ -359,7 +362,8 @@ public class ChatBot extends ToggleMod {
                           "REPLY" + e.getName(),
                           e.getDelay(),
                           sender,
-                          PriorityEnum.HIGH));
+                          PriorityEnum.HIGH
+                      ));
                   break;
                 }
                 case REPLY_WITH_INPUT: {
@@ -370,11 +374,13 @@ public class ChatBot extends ToggleMod {
                                 e.next(),
                                 SpamTokens.PLAYERNAME_SENDERNAME,
                                 arg,
-                                event.getSender().getName()),
+                                event.getSender().getName()
+                            ),
                             "REPLY_WITH_INPUT" + e.getName(),
                             e.getDelay(),
                             sender,
-                            PriorityEnum.HIGH));
+                            PriorityEnum.HIGH
+                        ));
                   }
                   break;
                 }
@@ -383,7 +389,7 @@ public class ChatBot extends ToggleMod {
               }
             });
   }
-  
+
   @SubscribeEvent
   public void onPlayerConnect(PlayerConnectEvent.Join event) {
     final String player = event.getProfile() != null ? event.getProfile().getName() : "null";
@@ -400,11 +406,13 @@ public class ChatBot extends ToggleMod {
                               e.next(),
                               SpamTokens.PLAYERNAME_NAMEHISTORY,
                               player,
-                              event.getPlayerInfo().getNameHistoryAsString()),
+                              event.getPlayerInfo().getNameHistoryAsString()
+                          ),
                           "PLAYER_CONNECT" + e.getName(),
                           e.getDelay(),
                           null,
-                          PriorityEnum.HIGH));
+                          PriorityEnum.HIGH
+                      ));
                   break;
                 }
                 default:
@@ -412,7 +420,7 @@ public class ChatBot extends ToggleMod {
               }
             });
   }
-  
+
   @SubscribeEvent
   public void onPlayerDisconnect(PlayerConnectEvent.Leave event) {
     final String player = event.getProfile() != null ? event.getProfile().getName() : "null";
@@ -429,11 +437,13 @@ public class ChatBot extends ToggleMod {
                               e.next(),
                               SpamTokens.PLAYERNAME_NAMEHISTORY,
                               player,
-                              event.getPlayerInfo().getNameHistoryAsString()),
+                              event.getPlayerInfo().getNameHistoryAsString()
+                          ),
                           "PLAYER_DISCONNECT" + e.getName(),
                           e.getDelay(),
                           null,
-                          PriorityEnum.HIGH));
+                          PriorityEnum.HIGH
+                      ));
                   break;
                 }
                 default:

@@ -9,5 +9,4 @@ public enum CallbackType {
   KEY_PRESSED,
   KEY_DOWN,
   CHANGE,
-  ;
 }

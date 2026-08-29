@@ -1,27 +1,28 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getModManager;
-
 import com.matt.forgehax.mods.services.TickRateService;
 import com.matt.forgehax.util.color.Colors;
 import com.matt.forgehax.util.command.Setting;
+import com.matt.forgehax.util.draw.SurfaceHelper;
 import com.matt.forgehax.util.math.AlignHelper;
 import com.matt.forgehax.util.math.AlignHelper.Align;
-import com.matt.forgehax.util.draw.SurfaceHelper;
 import com.matt.forgehax.util.mod.BaseMod;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.HudMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
 import net.minecraft.client.gui.GuiChat;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+import static com.matt.forgehax.Helper.getModManager;
+
 @RegisterMod
 public class ActiveModList extends HudMod {
-  
+
   private final Setting<Boolean> tps_meter =
       getCommandStub()
           .builders()
@@ -30,7 +31,7 @@ public class ActiveModList extends HudMod {
           .description("Shows the server tps")
           .defaultTo(true)
           .build();
-  
+
   private final Setting<Boolean> debug =
       getCommandStub()
           .builders()
@@ -39,7 +40,7 @@ public class ActiveModList extends HudMod {
           .description("Disables debug text on mods that have it")
           .defaultTo(false)
           .build();
-  
+
   private final Setting<Integer> factor =
       getCommandStub()
           .builders()
@@ -50,7 +51,7 @@ public class ActiveModList extends HudMod {
           .min(1)
           .max(100)
           .build();
-  
+
   private final Setting<Boolean> showLag =
       getCommandStub()
           .builders()
@@ -59,7 +60,7 @@ public class ActiveModList extends HudMod {
           .description("Shows lag time since last tick")
           .defaultTo(true)
           .build();
-  
+
   private final Setting<SortMode> sortMode =
       getCommandStub()
           .builders()
@@ -68,25 +69,28 @@ public class ActiveModList extends HudMod {
           .description("Sorting mode")
           .defaultTo(SortMode.ALPHABETICAL)
           .build();
-  
-  @Override
-  protected Align getDefaultAlignment() { return Align.TOPLEFT; }
-  @Override
-  protected int getDefaultOffsetX() { return 1; }
-  @Override
-  protected int getDefaultOffsetY() { return 1; }
-  @Override
-  protected double getDefaultScale() { return 1d; }
-  
+
   public ActiveModList() {
     super(Category.RENDER, "ActiveMods", true, "Shows list of all active mods");
   }
-  
+
+  @Override
+  protected Align getDefaultAlignment() {return Align.TOPLEFT;}
+
+  @Override
+  protected int getDefaultOffsetX() {return 1;}
+
+  @Override
+  protected int getDefaultOffsetY() {return 1;}
+
+  @Override
+  protected double getDefaultScale() {return 1d;}
+
   @Override
   public boolean isHidden() {
     return true;
   }
-  
+
   private String generateTickRateText() {
     StringBuilder builder = new StringBuilder("Tick-rate: ");
     TickRateService.TickRateData data = TickRateService.getTickData();
@@ -115,30 +119,30 @@ public class ActiveModList extends HudMod {
         }
       }
     }
-    
+
     if (showLag.get()) {
       long lastTickMs = TickRateService.getInstance().getLastTimeDiff();
-      
+
       if (lastTickMs < 1000) {
         builder.append(", 0.0s");
       } else {
         builder.append(String.format(", %01.1fs", ((float) (lastTickMs - 1000)) / 1000));
       }
     }
-    
+
     return builder.toString();
   }
-  
+
   @SubscribeEvent
   public void onRenderScreen(RenderGameOverlayEvent.Text event) {
     int align = alignment.get().ordinal();
-    
+
     List<String> text = new ArrayList<>();
-    
+
     if (tps_meter.get()) {
       text.add(generateTickRateText());
     }
-    
+
     if (MC.currentScreen instanceof GuiChat || MC.gameSettings.showDebugInfo) {
       long enabledMods = getModManager()
           .getMods()
@@ -157,23 +161,25 @@ public class ActiveModList extends HudMod {
           .sorted(sortMode.get().getComparator())
           .forEach(name -> text.add(AlignHelper.getFlowDirX2(align) == 1 ? ">" + name : name + "<"));
     }
-  
-    SurfaceHelper.drawTextAlign(text, getPosX(0), getPosY(0),
-        Colors.WHITE.toBuffer(), scale.get(), true, align);
+
+    SurfaceHelper.drawTextAlign(
+        text, getPosX(0), getPosY(0),
+        Colors.WHITE.toBuffer(), scale.get(), true, align
+    );
   }
-  
+
   private enum SortMode {
     ALPHABETICAL((o1, o2) -> 0), // mod list is already sorted alphabetically
     LENGTH(Comparator.<String>comparingInt(SurfaceHelper::getTextWidth).reversed());
-    
+
     private final Comparator<String> comparator;
-    
-    public Comparator<String> getComparator() {
-      return this.comparator;
-    }
-    
+
     SortMode(Comparator<String> comparatorIn) {
       this.comparator = comparatorIn;
+    }
+
+    public Comparator<String> getComparator() {
+      return this.comparator;
     }
   }
 }

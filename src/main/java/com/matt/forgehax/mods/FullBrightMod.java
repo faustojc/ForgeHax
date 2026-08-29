@@ -9,11 +9,7 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
 
 @RegisterMod
 public class FullBrightMod extends ToggleMod {
-  
-  public FullBrightMod() {
-    super(Category.WORLD, "FullBright", false, "Makes everything render with maximum brightness");
-  }
-  
+
   private final Setting<Float> defaultGamma =
       getCommandStub()
           .builders()
@@ -24,17 +20,21 @@ public class FullBrightMod extends ToggleMod {
           .min(0.1F)
           .max(16F)
           .build();
-  
+
+  public FullBrightMod() {
+    super(Category.WORLD, "FullBright", false, "Makes everything render with maximum brightness");
+  }
+
   @Override
   public void onEnabled() {
     MC.gameSettings.gammaSetting = 16F;
   }
-  
+
   @Override
   public void onDisabled() {
     MC.gameSettings.gammaSetting = defaultGamma.get();
   }
-  
+
   @SubscribeEvent
   public void onClientTick(TickEvent.ClientTickEvent event) {
     MC.gameSettings.gammaSetting = 16F;

@@ -11,12 +11,12 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
 @RegisterMod
 public class AntiHunger extends ToggleMod {
-  
+
   public AntiHunger() {
     super(Category.PLAYER, "AntiHunger", false, "Don't use hunger for travelling");
   }
-  
-  
+
+
   @SubscribeEvent
   public void onPacketSending(PacketEvent.Outgoing.Pre event) {
     if (event.getPacket() instanceof CPacketPlayer) {
@@ -27,7 +27,7 @@ public class AntiHunger extends ToggleMod {
         FastReflection.Fields.CPacketPlayer_onGround.set(packet, true);
       }
     }
-    
+
     if (event.getPacket() instanceof CPacketEntityAction) {
       CPacketEntityAction packet = event.getPacket();
       if (packet.getAction() == CPacketEntityAction.Action.START_SPRINTING

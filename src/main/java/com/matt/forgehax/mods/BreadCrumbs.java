@@ -1,7 +1,5 @@
 package com.matt.forgehax.mods;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.matt.forgehax.Helper;
 import com.matt.forgehax.asm.events.PacketEvent;
 import com.matt.forgehax.events.LocalPlayerUpdateEvent;
@@ -25,10 +23,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.matt.forgehax.Helper.getFileManager;
 
@@ -36,6 +30,7 @@ import static com.matt.forgehax.Helper.getFileManager;
 @RegisterMod
 public class BreadCrumbs extends ToggleMod {
 
+  private static final Path BASE_PATH = getFileManager().getBaseResolve("breadcrumbs");
   public final Setting<Integer> smoothness =
       getCommandStub()
           .builders()
@@ -44,17 +39,8 @@ public class BreadCrumbs extends ToggleMod {
           .description("rendering smoothness")
           .defaultTo(1)
           .min(1)
+          .max(20)
           .build();
-
-  /*public final Setting<Integer> maxpoints =
-      getCommandStub()
-          .builders()
-          .<Integer>newSettingBuilder()
-          .name("maxpoints")
-          .description("maximum number of points to save (0 for no limit)")
-          .defaultTo(1)
-          .min(1)
-          .build();*/
 
   /*public final Setting<Boolean> simplify =
       getCommandStub()
@@ -64,7 +50,16 @@ public class BreadCrumbs extends ToggleMod {
           .description("Simplify the path")
           .defaultTo(false)
           .build();*/
-
+  public final Setting<Integer> maxpoints =
+      getCommandStub()
+          .builders()
+          .<Integer>newSettingBuilder()
+          .name("maxpoints")
+          .description("maximum number of points to save")
+          .defaultTo(20000)
+          .min(1)
+          .max(100000)
+          .build();
   public final Setting<Boolean> drawIntermediate =
       getCommandStub()
           .builders()
@@ -73,134 +68,25 @@ public class BreadCrumbs extends ToggleMod {
           .description("Draw points between anchors")
           .defaultTo(true)
           .build();
+  private final List<Trail> trails = new ArrayList<>();
+  private boolean recording = true; // TODO: use this
+  private Anchor rootAnchor;
+  private Anchor newestAnchor;
+  private Set<Anchor> visibleLastTick = Collections.emptySet();
+  private int dimension;
+  private List<Anchor> currentPath = Collections.emptyList();
+  private List<List<Vec3d>> pointsToDraw = Collections.emptyList();
+  private boolean graphDirty = true;
+  private boolean renderSnapshotDirty = true;
+  private int cachedSmoothness = -1;
+  private boolean cachedDrawIntermediate;
+  private int cachedMaxPoints = -1;
+  private int recordedPointCount;
+  private int graphAnchorCount;
+  private boolean topologyPruned;
 
   public BreadCrumbs() {
     super(Category.RENDER, "BreadCrumbs", false, "epic trail meme");
-  }
-
-  private static final Path BASE_PATH = getFileManager().getBaseResolve("breadcrumbs");
-
-  private List<Trail> trails = new ArrayList<>();
-  private boolean recording = true; // TODO: use this
-
-  private Anchor rootAnchor;
-  private Anchor newestAnchor;
-
-  private Set<Anchor> visibleLastTick = Collections.emptySet();
-  private int dimension;
-
-  private Supplier<Stream<Stream<Vec3d>>> pointsToDraw = Stream::empty; // dont want to compute this in the render event
-
-  // this should be immutable
-  /*private static class Trail {
-    final int dimension;
-    private final Anchor root;
-    private final Anchor last;
-    final List<Anchor> path;
-
-    Trail(int dim, Anchor root, Anchor last) {
-      this.dimension = dim;
-      this.root = root;
-      this.last = last;
-      this.path = Collections.unmodifiableList(pathFind(root, last));
-    }
-  }*/
-  private static class Trail {
-    final int dimension;
-    final List<Vec3d> points;
-
-    Trail(int dim, List<Vec3d> path) {
-      this.dimension = dim;
-      this.points = Collections.unmodifiableList(path);
-    }
-
-    static Trail fromGraph(int dim, Anchor root, Anchor target, BreadCrumbs bc) {
-      final List<Anchor> anchors = pathFind(root, target);
-      final List<List<Vec3d>> points = bc.getAllPoints(anchors);
-      final List<Vec3d> flat = new ArrayList<>();
-      points.forEach(flat::addAll);
-      return new Trail(dim, flat);
-    }
-  }
-
-  private static class Anchor {
-    final Vec3d pos;
-    final List<Vec3d> points;
-    final List<Anchor> connected;
-
-    Anchor(Vec3d pos) {
-      this(pos, new ArrayList<>(), new ArrayList<>());
-    }
-
-    Anchor(Vec3d pos, List<Vec3d> points, List<Anchor> connected) {
-      this.pos = pos;
-      this.points = points;
-      this.connected = connected;
-    }
-
-    void connectAnchor(Anchor anchor) {
-      this.connected.add(anchor);
-    }
-  }
-
-  /*private static class AnchorGraph {
-    final Anchor root;
-    final Set<Anchor> vertices = new HashSet<>();
-  }*/
-
-  private enum Serialization {;
-    static {
-      try {
-        if (!Files.exists(BASE_PATH)) Files.createDirectories(BASE_PATH);
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
-    }
-    private static Trail readTrail(DataInputStream dis) throws IOException {
-      final int dim = dis.readInt();
-      final int size = dis.readInt(); // number of points
-      final List<Vec3d> points = new ArrayList<>(size);
-      for (int i = 0; i < size; i++) {
-        points.add(new Vec3d(
-           dis.readDouble(),
-           dis.readDouble(),
-           dis.readDouble()
-        ));
-      }
-
-      return new Trail(dim, points);
-    }
-
-    private static void writeTrail(Trail trail, DataOutputStream dos) throws IOException {
-      dos.writeInt(trail.dimension);
-      dos.writeInt(trail.points.size());
-      for (Vec3d p : trail.points) {
-        dos.writeDouble(p.x);
-        dos.writeDouble(p.y);
-        dos.writeDouble(p.z);
-      }
-    }
-
-    static List<Trail> deserialize(Path p) throws IOException {
-      try (DataInputStream is = new DataInputStream(Files.newInputStream(p))) {
-        final int numTrails = is.readInt();
-        final List<Trail> trails = new ArrayList<>(numTrails);
-        for (int i = 0; i < numTrails; i++) {
-          trails.add(readTrail(is));
-        }
-
-        return trails;
-      }
-    }
-
-    static void serialize(List<Trail> trails, Path p) throws IOException {
-      try (DataOutputStream dos = new DataOutputStream(Files.newOutputStream(p))) {
-        dos.writeInt(trails.size());
-        for (Trail t : trails) {
-          writeTrail(t, dos);
-        }
-      }
-    }
   }
 
   private static boolean isVisible(Anchor anchor) {
@@ -213,23 +99,38 @@ public class BreadCrumbs extends ToggleMod {
     }
   }
 
-  private static void forEachAnchor(Anchor root, Consumer<Anchor> fn) {
-    forEachAnchor0(root, new HashSet<>(), fn);
+  private static AnchorVisibility getAnchorVisibility(Anchor root) {
+    final Set<Anchor> all = new HashSet<>();
+    final Set<Anchor> visible = new HashSet<>();
+    getAnchorVisibility(root, all, visible);
+    return new AnchorVisibility(all, visible);
   }
 
-  private static Set<Anchor> getAllAnchors(Anchor root) {
-    final Set<Anchor> visited = new HashSet<>();
-    forEachAnchor0(root, visited, (unused) -> {});
-    return visited;
-  }
+  /*private static class AnchorGraph {
+    final Anchor root;
+    final Set<Anchor> vertices = new HashSet<>();
+  }*/
 
-  private static void forEachAnchor0(Anchor root, Set<Anchor> visited, Consumer<Anchor> fn) {
-    if (visited.contains(root)) return;
-    visited.add(root);
-    fn.accept(root);
-    for (Anchor anchor : root.connected) {
-      forEachAnchor0(anchor, visited, fn);
+  private static void getAnchorVisibility(
+      Anchor anchor, Set<Anchor> all, Set<Anchor> visible) {
+    if (!all.add(anchor)) return;
+    if (isVisible(anchor)) visible.add(anchor);
+    for (Anchor connected : anchor.connected) {
+      getAnchorVisibility(connected, all, visible);
     }
+  }
+
+  private static List<Anchor> getPath(Anchor source, Anchor target, Map<Anchor, Anchor> prev) {
+    final List<Anchor> out = new ArrayList<>();
+    Anchor it = target;
+    if (prev.containsKey(it) || it == source) {
+      while (it != null) {
+        out.add(it); // supposed to add to the beginning of the list but returning a reverse view will have the same effect
+        it = prev.get(it);
+      }
+    }
+    Collections.reverse(out);
+    return out;
   }
 
   /*private static Anchor minAnchor(Anchor root, Comparator<Anchor> comparator) {
@@ -246,62 +147,35 @@ public class BreadCrumbs extends ToggleMod {
     return min;
   }*/
 
-  private static Set<Anchor> getVisibleAnchors(Anchor root) {
-    final Set<Anchor> all = getAllAnchors(root);
-    all.removeIf(anchor -> !isVisible(anchor));
-    return all;
-  }
-
-
-  private static <T> List<T> listDifference(List<T> a, List<T> b) {
-    final List<T> out = new ArrayList<>(a.size());
-    for (T x : a) {
-      if (!b.contains(x)) out.add(x);
-    }
-    return out;
-  }
-
-
-  private static List<Anchor> getPath(Anchor source, Anchor target, Map<Anchor, Anchor> prev) {
-    final List<Anchor> out = new ArrayList<>();
-    Anchor it = target;
-    if (prev.containsKey(it) || it == source) {
-      while (it != null) {
-        out.add(it); // supposed to add to the beginning of the list but returning a reverse view will have the same effect
-        it = prev.get(it);
-      }
-    }
-    return Lists.reverse(out);
-  }
   private static double length(Anchor a, Anchor b) {
     return a.pos.distanceTo(b.pos);
   }
+
   private static List<Anchor> pathFind(Anchor root, Anchor target) {
-    final Set<Anchor> unvisited = getAllAnchors(root);
     final Map<Anchor, Double> distances = new HashMap<>();
-    for (Anchor it : unvisited) distances.put(it, Double.POSITIVE_INFINITY);
     distances.put(root, 0.D);
     final Map<Anchor, Anchor> prev = new HashMap<>();
+    final PriorityQueue<PathNode> queue =
+        new PriorityQueue<>(Comparator.comparingDouble(node -> node.distance));
+    queue.add(new PathNode(root, 0.D));
 
-    while (!unvisited.isEmpty()) {
-      final Anchor u = Collections.min(unvisited, Comparator.comparingDouble(distances::get));
-      unvisited.remove(u);
+    while (!queue.isEmpty()) {
+      final PathNode node = queue.poll();
+      final Anchor u = node.anchor;
+      if (node.distance > distances.getOrDefault(u, Double.POSITIVE_INFINITY)) continue;
       if (u == target) break;
 
       for (Anchor v : u.connected) {
         final double alt = distances.get(u) + length(u, v);
-        if (alt < distances.get(v)) {
+        if (alt < distances.getOrDefault(v, Double.POSITIVE_INFINITY)) {
           distances.put(v, alt);
           prev.put(v, u);
+          queue.add(new PathNode(v, alt));
         }
       }
     }
 
     return getPath(root, target, prev);
-  }
-
-  private static <T> Optional<T> getLast(List<T> list) {
-    return !list.isEmpty() ? Optional.of(list.get(list.size() - 1)) : Optional.empty();
   }
 
   @SubscribeEvent
@@ -316,62 +190,105 @@ public class BreadCrumbs extends ToggleMod {
         this.rootAnchor = new Anchor(playerPos);
         this.newestAnchor = rootAnchor;
         this.dimension = MC.player.dimension;
-        return;
-      }
-
-      final Set<Anchor> visibleAnchors = getVisibleAnchors(this.rootAnchor);
-      final Set<Anchor> noLongerVisible = Sets.difference(this.visibleLastTick, visibleAnchors);
-
-      final Set<Anchor> allOldAnchors = Sets.difference(getAllAnchors(rootAnchor), Collections.singleton(this.newestAnchor));
-
-      final Optional<Anchor> closest = !allOldAnchors.isEmpty() ? // TODO: make this a small list?
-          Optional.of(Collections.min(allOldAnchors, Comparator.comparingDouble(anch -> anch.pos.distanceTo(playerPos))))
-          : Optional.empty();
-
-      if (noLongerVisible.contains(this.newestAnchor) || closest.map(noLongerVisible::contains).orElse(false)) { // new anchor
-        final Anchor newAnchor = new Anchor(playerPos);
-        Stream.of(noLongerVisible, visibleAnchors)
-            .flatMap(Set::stream)
-            .distinct()
-            .forEach(anch -> anch.connectAnchor(newAnchor));
-        this.newestAnchor = newAnchor;
-      } else { // new point for the last anchor
-        final List<Vec3d> points = this.newestAnchor.points;
-        final Optional<Vec3d> prev = getLast(points);
-        // don't spam points if we don't move
-        if (!prev.isPresent() || prev.get().distanceTo(playerPos) > 0.01) {
-          points.add(playerPos);
+        this.graphAnchorCount = 1;
+        this.recordedPointCount++;
+        this.visibleLastTick = Collections.emptySet();
+        this.graphDirty = true;
+        this.renderSnapshotDirty = true;
+      } else {
+        if (this.topologyPruned) {
+          this.visibleLastTick = new HashSet<>(this.visibleLastTick);
+          this.visibleLastTick.retainAll(this.currentPath);
+          this.topologyPruned = false;
         }
+        final AnchorVisibility anchorVisibility = getAnchorVisibility(this.rootAnchor);
+        final Set<Anchor> visibleAnchors = anchorVisibility.visible;
+        final Set<Anchor> noLongerVisible = new HashSet<>(this.visibleLastTick);
+        noLongerVisible.removeAll(visibleAnchors);
+
+        final Set<Anchor> allOldAnchors = anchorVisibility.all;
+        allOldAnchors.remove(this.newestAnchor);
+
+        Anchor closest = null;
+        double closestDistance = Double.POSITIVE_INFINITY;
+        for (Anchor anchor : allOldAnchors) {
+          final double distance = anchor.pos.distanceTo(playerPos);
+          if (distance < closestDistance) {
+            closest = anchor;
+            closestDistance = distance;
+          }
+        }
+
+        if (noLongerVisible.contains(this.newestAnchor)
+            || (closest != null && noLongerVisible.contains(closest))) { // new anchor
+          final Anchor newAnchor = new Anchor(playerPos);
+          for (Anchor anchor : noLongerVisible) {
+            anchor.connectAnchor(newAnchor);
+          }
+          for (Anchor anchor : visibleAnchors) {
+            if (!noLongerVisible.contains(anchor)) {
+              anchor.connectAnchor(newAnchor);
+            }
+          }
+          this.newestAnchor = newAnchor;
+          this.graphAnchorCount++;
+          this.recordedPointCount++;
+          this.graphDirty = true;
+          trimIntermediatePoints();
+          this.renderSnapshotDirty = true;
+        } else { // new point for the last anchor
+          final Deque<Vec3d> points = this.newestAnchor.points;
+          // don't spam points if we don't move
+          if (points.isEmpty()
+              || points.peekLast().distanceTo(playerPos) > 0.01) {
+            points.addLast(playerPos);
+            this.recordedPointCount++;
+            trimIntermediatePoints();
+            this.renderSnapshotDirty = true;
+          }
+        }
+
+        final Set<Anchor> nextVisible = new HashSet<>(visibleAnchors);
+        if (this.topologyPruned) {
+          nextVisible.retainAll(this.currentPath);
+          this.topologyPruned = false;
+        }
+        this.visibleLastTick = nextVisible;
       }
-
-      this.visibleLastTick = getVisibleAnchors(this.rootAnchor); // should probably just reuse the list we just made
     }
 
-    this.pointsToDraw = getPointsToDraw();
+    refreshRenderSnapshotIfNeeded();
   }
 
-  private static <T> List<T> partialList(List<T> list, int smoothness) {
-    if (smoothness == 1) return list;
-    // TODO: return view of list
-    final List<T> out = new ArrayList<>((int)Math.ceil(list.size() / (double)smoothness));
-    for (int i = 0; i < list.size(); i += smoothness)  {
-      out.add(list.get(i));
+  private List<Anchor> getCurrentPath() {
+    if (this.rootAnchor == null || this.newestAnchor == null) {
+      return Collections.emptyList();
     }
-    return out;
+    if (this.graphDirty) {
+      this.currentPath = pathFind(this.rootAnchor, this.newestAnchor);
+      this.graphDirty = false;
+    }
+    return this.currentPath;
   }
 
-  private List<List<Vec3d>> getAllPoints(List<Anchor> path) {
-    final List<List<Vec3d>> points = new ArrayList<>();
+  private List<Vec3d> getAllPoints(List<Anchor> path, boolean drawIntermediate, int smoothnessValue) {
+    final List<Vec3d> points = new ArrayList<>();
 
     for (int i = 0; i < path.size(); i++) {
       final Anchor anchor = path.get(i);
 
-      points.add(Collections.singletonList(anchor.pos)); // might be better to only use the anchor's list of points
-      if (drawIntermediate.get()) {
-        final int idx = i;
+      points.add(anchor.pos);
+      if (drawIntermediate) {
         // if this is the last anchor or this anchor's point list can be linked to the next
-        if ((i == path.size() - 1) || getLast(anchor.points).map(p -> p.distanceTo(path.get(idx + 1).pos) < 1).orElse(false)) {
-          points.add(partialList(anchor.points, this.smoothness.get()));
+        final boolean linkedToNext = i < path.size() - 1
+            && !anchor.points.isEmpty()
+            && anchor.points.peekLast().distanceTo(path.get(i + 1).pos) < 1;
+        if (i == path.size() - 1 || linkedToNext) {
+          int point = 0;
+          for (Vec3d intermediate : anchor.points) {
+            if (point % smoothnessValue == 0) points.add(intermediate);
+            point++;
+          }
         }
       }
     }
@@ -379,56 +296,192 @@ public class BreadCrumbs extends ToggleMod {
     return points;
   }
 
-  private Supplier<Stream<Stream<Vec3d>>> getPointsToDraw() {
-    final List<List<Vec3d>> oldPaths = this.trails.stream()
-        .filter(t -> t.dimension == this.dimension)
-        .map(t -> t.points)
-        .collect(Collectors.toList());
+  private void trimIntermediatePoints() {
+    if (this.recordedPointCount > this.maxpoints.get()) {
+      trimStoredTrails(this.maxpoints.get());
+    }
+  }
 
-    // TODO: only pathfind when there is a new anchor
-    // Trails<Anchors<Points>>>
-    /*final List<List<List<Vec3d>>> trails =
-        Stream.concat(
-          oldPaths,
-          Stream.of(pathFind(this.rootAnchor, this.newestAnchor))
-        )
-        .map(this::getAllPoints)
-        .collect(Collectors.toList());*/
-    final List<List<Vec3d>> currentTrail = this.rootAnchor != null ?
-        getAllPoints(pathFind(this.rootAnchor, this.newestAnchor))
-        : Collections.emptyList();
+  private void trimStoredTrails(int maxPoints) {
+    int excess = this.recordedPointCount - maxPoints;
+    if (excess <= 0) return;
 
-    /*return () -> trails.stream()
-        .map(anchors -> anchors.stream().flatMap(List::stream));*/
-    return () -> Stream.concat(
-        oldPaths.stream().map(List::stream),
-        Stream.of(currentTrail.stream().flatMap(List::stream))
-    );
+    excess -= trimOldestTrails(excess);
+
+    if (excess > 0 && this.rootAnchor != null) {
+      trimAnchorPoints(this.rootAnchor, new HashSet<>(), excess);
+    }
+    if (this.recordedPointCount > maxPoints && this.rootAnchor != null) {
+      trimGraphHistory(maxPoints);
+    }
+    this.renderSnapshotDirty = true;
+  }
+
+  private int trimOldestTrails(int limit) {
+    int removed = 0;
+    for (int i = 0; i < this.trails.size() && removed < limit; ) {
+      final Trail trail = this.trails.get(i);
+      final int remove = Math.min(limit - removed, trail.size());
+      if (remove == trail.size()) {
+        this.trails.remove(i);
+      } else {
+        trail.discardOldest(remove);
+        i++;
+      }
+      this.recordedPointCount -= remove;
+      removed += remove;
+    }
+    return removed;
+  }
+
+  private void trimGraphHistory(int maxPoints) {
+    if (this.rootAnchor == null || this.newestAnchor == null) return;
+
+    final int currentGraphPointCount =
+        this.graphAnchorCount + countAnchorPoints(this.rootAnchor, new HashSet<>());
+    int historicalPointCount = this.recordedPointCount - currentGraphPointCount;
+    final int historicalLimit = Math.max(0, maxPoints - 1);
+    if (historicalPointCount > historicalLimit) {
+      trimOldestTrails(historicalPointCount - historicalLimit);
+      historicalPointCount = this.recordedPointCount - currentGraphPointCount;
+    }
+
+    final int available = Math.max(1, maxPoints - Math.max(0, historicalPointCount));
+    final int headroom = Math.max(64, available / 10);
+    final int target = Math.max(1, available - headroom);
+    final List<Anchor> path = new ArrayList<>(getCurrentPath());
+    if (path.isEmpty()) {
+      path.add(this.newestAnchor);
+    }
+
+    final List<Anchor> retainedReverse = new ArrayList<>();
+    int remaining = target;
+    for (int i = path.size() - 1; i >= 0 && remaining > 0; i--) {
+      final Anchor anchor = path.get(i);
+      final int allowedPoints = Math.min(anchor.points.size(), Math.max(0, remaining - 1));
+      for (int point = anchor.points.size() - allowedPoints; point > 0; point--) {
+        anchor.points.removeFirst();
+      }
+      retainedReverse.add(anchor);
+      remaining -= 1 + anchor.points.size();
+    }
+
+    Collections.reverse(retainedReverse);
+    final List<Anchor> retained = retainedReverse;
+    final Anchor retainedRoot = retained.get(0);
+    for (Anchor anchor : retained) {
+      anchor.connected.clear();
+    }
+    for (int i = 1; i < retained.size(); i++) {
+      retained.get(i - 1).connectAnchor(retained.get(i));
+    }
+
+    this.rootAnchor = retainedRoot;
+    this.newestAnchor = retained.get(retained.size() - 1);
+    this.currentPath = Collections.unmodifiableList(new ArrayList<>(retained));
+    this.graphDirty = false;
+    this.graphAnchorCount = retained.size();
+    this.visibleLastTick = new HashSet<>(this.visibleLastTick);
+    this.visibleLastTick.retainAll(retained);
+    this.topologyPruned = true;
+    this.recordedPointCount = historicalPointCount
+        + this.graphAnchorCount
+        + countAnchorPoints(this.rootAnchor, new HashSet<>());
+  }
+
+  private int trimAnchorPoints(Anchor anchor, Set<Anchor> visited, int limit) {
+    if (limit <= 0 || !visited.add(anchor)) return 0;
+
+    final int remove = Math.min(limit, anchor.points.size());
+    if (remove > 0) {
+      for (int i = 0; i < remove; i++) {
+        anchor.points.removeFirst();
+      }
+      this.recordedPointCount -= remove;
+    }
+
+    int removed = remove;
+    for (Anchor connected : anchor.connected) {
+      if (removed >= limit) break;
+      removed += trimAnchorPoints(connected, visited, limit - removed);
+    }
+    return removed;
+  }
+
+  private int countAnchorPoints(Anchor anchor, Set<Anchor> visited) {
+    if (!visited.add(anchor)) return 0;
+    int count = anchor.points.size();
+    for (Anchor connected : anchor.connected) {
+      count += countAnchorPoints(connected, visited);
+    }
+    return count;
+  }
+
+  private void refreshRenderSnapshotIfNeeded() {
+    final int smoothnessValue = this.smoothness.get();
+    final boolean drawIntermediateValue = this.drawIntermediate.get();
+    final int maxPointsValue = this.maxpoints.get();
+    if (smoothnessValue != this.cachedSmoothness
+        || drawIntermediateValue != this.cachedDrawIntermediate
+        || maxPointsValue != this.cachedMaxPoints) {
+      this.cachedSmoothness = smoothnessValue;
+      this.cachedDrawIntermediate = drawIntermediateValue;
+      this.cachedMaxPoints = maxPointsValue;
+      trimStoredTrails(maxPointsValue);
+      this.renderSnapshotDirty = true;
+    }
+    if (!this.renderSnapshotDirty) return;
+
+    final List<List<Vec3d>> snapshot = new ArrayList<>();
+    for (Trail trail : this.trails) {
+      if (trail.dimension == this.dimension && trail.size() > 0) {
+        snapshot.add(trail.visiblePoints());
+      }
+    }
+    if (this.rootAnchor != null) {
+      final List<Vec3d> currentTrail =
+          getAllPoints(getCurrentPath(), drawIntermediateValue, smoothnessValue);
+      if (!currentTrail.isEmpty()) snapshot.add(Collections.unmodifiableList(currentTrail));
+    }
+    this.pointsToDraw = Collections.unmodifiableList(snapshot);
+    this.renderSnapshotDirty = false;
   }
 
   private void pushNewTrailAndReset() {
-    this.trails.add(Trail.fromGraph(this.dimension, this.rootAnchor, this.newestAnchor, this));
+    if (this.rootAnchor == null) return;
+    final int currentPointCount = countAnchorPoints(this.rootAnchor, new HashSet<>());
+    final int currentGraphPointCount = currentPointCount + this.graphAnchorCount;
+    final Trail trail = new Trail(
+        this.dimension,
+        getAllPoints(getCurrentPath(), this.drawIntermediate.get(), this.smoothness.get())
+    );
+    this.recordedPointCount -= currentGraphPointCount;
+    this.recordedPointCount += trail.size();
+    this.trails.add(trail);
+    this.graphAnchorCount = 0;
+    trimStoredTrails(this.maxpoints.get());
 
     this.rootAnchor = null;
     this.newestAnchor = null;
+    this.currentPath = Collections.emptyList();
+    this.graphDirty = true;
     this.visibleLastTick = Collections.emptySet();
+    this.renderSnapshotDirty = true;
   }
 
   @SubscribeEvent
   public void onRender(RenderEvent event) {
+    refreshRenderSnapshotIfNeeded();
     BufferBuilder builder = event.getBuffer();
 
-    this.pointsToDraw.get().forEach(vecStream -> {
-      final List<Vec3d> path = vecStream.collect(Collectors.toList()); // TODO: dont collect
-
+    for (List<Vec3d> path : this.pointsToDraw) {
       builder.begin(GL11.GL_LINE_STRIP, DefaultVertexFormats.POSITION_COLOR);
-      path.forEach(p -> {
+      for (Vec3d p : path) {
         builder.pos(p.x, p.y, p.z).color(255, 0, 0, 255).endVertex();
-      });
+      }
       event.getTessellator().draw();
-    });
+    }
   }
-
 
   @SubscribeEvent
   public void onPacketReceived(PacketEvent.Incoming.Pre event) {
@@ -454,7 +507,13 @@ public class BreadCrumbs extends ToggleMod {
             this.newestAnchor = null;
             this.visibleLastTick = Collections.emptySet();
             this.trails.clear();
-            this.pointsToDraw = Stream::empty;
+            this.currentPath = Collections.emptyList();
+            this.recordedPointCount = 0;
+            this.graphAnchorCount = 0;
+            this.topologyPruned = false;
+            this.graphDirty = true;
+            this.renderSnapshotDirty = true;
+            this.pointsToDraw = Collections.emptyList();
           });
         })
         .build();
@@ -468,9 +527,13 @@ public class BreadCrumbs extends ToggleMod {
         .processor(data -> {
           MC.addScheduledTask(() -> {
             try {
+              trimStoredTrails(this.maxpoints.get());
               List<Trail> trails = new ArrayList<>(this.trails);
               if (this.rootAnchor != null) {
-                trails.add(Trail.fromGraph(this.dimension, this.rootAnchor, this.newestAnchor, this));
+                trails.add(new Trail(
+                    this.dimension,
+                    getAllPoints(getCurrentPath(), this.drawIntermediate.get(), this.smoothness.get())
+                ));
               }
 
               final Path out = BASE_PATH.resolve(data.getArgumentAsString(0));
@@ -495,9 +558,19 @@ public class BreadCrumbs extends ToggleMod {
               this.trails.clear();
               this.rootAnchor = null;
               this.newestAnchor = null;
-              this.pointsToDraw = Stream::empty;
+              this.currentPath = Collections.emptyList();
+              this.recordedPointCount = 0;
+              this.graphAnchorCount = 0;
+              this.topologyPruned = false;
+              this.graphDirty = true;
+              this.renderSnapshotDirty = true;
+              this.pointsToDraw = Collections.emptyList();
 
               this.trails.addAll(Serialization.deserialize(BASE_PATH.resolve(data.getArgumentAsString(0))));
+              for (Trail trail : this.trails) {
+                this.recordedPointCount += trail.size();
+              }
+              trimStoredTrails(this.maxpoints.get());
               this.recording = false;
             } catch (IOException ex) {
               Helper.printError(ex.toString());
@@ -530,6 +603,151 @@ public class BreadCrumbs extends ToggleMod {
           });
         })
         .build();
+  }
+
+  private enum Serialization {
+    ;
+
+    static {
+      try {
+        if (!Files.exists(BASE_PATH)) Files.createDirectories(BASE_PATH);
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    }
+
+    private static Trail readTrail(DataInputStream dis) throws IOException {
+      final int dim = dis.readInt();
+      final int size = dis.readInt(); // number of points
+      final List<Vec3d> points = new ArrayList<>(size);
+      for (int i = 0; i < size; i++) {
+        points.add(new Vec3d(
+            dis.readDouble(),
+            dis.readDouble(),
+            dis.readDouble()
+        ));
+      }
+
+      return new Trail(dim, points);
+    }
+
+    private static void writeTrail(Trail trail, DataOutputStream dos) throws IOException {
+      dos.writeInt(trail.dimension);
+      dos.writeInt(trail.size());
+      for (int i = 0; i < trail.size(); i++) {
+        Vec3d p = trail.get(i);
+        dos.writeDouble(p.x);
+        dos.writeDouble(p.y);
+        dos.writeDouble(p.z);
+      }
+    }
+
+    static List<Trail> deserialize(Path p) throws IOException {
+      try (DataInputStream is = new DataInputStream(Files.newInputStream(p))) {
+        final int numTrails = is.readInt();
+        final List<Trail> trails = new ArrayList<>(numTrails);
+        for (int i = 0; i < numTrails; i++) {
+          trails.add(readTrail(is));
+        }
+
+        return trails;
+      }
+    }
+
+    static void serialize(List<Trail> trails, Path p) throws IOException {
+      try (DataOutputStream dos = new DataOutputStream(Files.newOutputStream(p))) {
+        dos.writeInt(trails.size());
+        for (Trail t : trails) {
+          writeTrail(t, dos);
+        }
+      }
+    }
+  }
+
+  // this should be immutable
+  /*private static class Trail {
+    final int dimension;
+    private final Anchor root;
+    private final Anchor last;
+    final List<Anchor> path;
+
+    Trail(int dim, Anchor root, Anchor last) {
+      this.dimension = dim;
+      this.root = root;
+      this.last = last;
+      this.path = Collections.unmodifiableList(pathFind(root, last));
+    }
+  }*/
+  private static class Trail {
+    final int dimension;
+    final List<Vec3d> points;
+    private int firstPoint;
+
+    Trail(int dim, List<Vec3d> path) {
+      this.dimension = dim;
+      this.points = Collections.unmodifiableList(path);
+    }
+
+    int size() {
+      return this.points.size() - this.firstPoint;
+    }
+
+    Vec3d get(int index) {
+      return this.points.get(this.firstPoint + index);
+    }
+
+    List<Vec3d> visiblePoints() {
+      return this.firstPoint == 0
+          ? this.points
+          : this.points.subList(this.firstPoint, this.points.size());
+    }
+
+    int discardOldest(int count) {
+      final int discarded = Math.min(count, size());
+      this.firstPoint += discarded;
+      return discarded;
+    }
+
+  }
+
+  private static class Anchor {
+    final Vec3d pos;
+    final Deque<Vec3d> points;
+    final List<Anchor> connected;
+
+    Anchor(Vec3d pos) {
+      this(pos, new ArrayDeque<>(), new ArrayList<>());
+    }
+
+    Anchor(Vec3d pos, Deque<Vec3d> points, List<Anchor> connected) {
+      this.pos = pos;
+      this.points = points;
+      this.connected = connected;
+    }
+
+    void connectAnchor(Anchor anchor) {
+      this.connected.add(anchor);
+    }
+  }
+
+  private static class AnchorVisibility {
+    final Set<Anchor> all;
+    final Set<Anchor> visible;
+
+    AnchorVisibility(Set<Anchor> all, Set<Anchor> visible) {
+      this.all = all;
+      this.visible = visible;
+    }
+  }
+
+  private static class PathNode {
+    final Anchor anchor;
+    final double distance;
+
+    PathNode(Anchor anchor, double distance) {
+      this.anchor = anchor;
+      this.distance = distance;
+    }
   }
 
 }

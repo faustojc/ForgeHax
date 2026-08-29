@@ -9,5 +9,4 @@ public enum PriorityEnum {
   DEFAULT,
   LOW,
   LOWEST,
-  ;
 }

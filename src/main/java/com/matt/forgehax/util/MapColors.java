@@ -7,7 +7,7 @@ import net.minecraft.block.material.MapColor;
  * Created by Babbaj on 8/19/2017.
  */
 public class MapColors {
-  
+
   /**
    * list of all possible colors used on maps, 4 for each base color
    */
@@ -16,7 +16,7 @@ public class MapColors {
    * list of base colors from {@link net.minecraft.block.material.MapColor}
    */
   private static final int[] BASE_COLORS;
-  
+
   static {
     // find the length of array that contains non null map colors
     int baseColorsLength = 0;
@@ -28,15 +28,15 @@ public class MapColors {
     }
     BASE_COLORS = new int[baseColorsLength];
     COLOR_LIST = new int[baseColorsLength * 4];
-    
+
     for (int i = 0; i < BASE_COLORS.length; i++) {
       // get integer color values from MapColor object list
       BASE_COLORS[i] = MapColor.COLORS[i].colorValue;
     }
-    
+
     for (int i = 0;
-        i < BASE_COLORS.length;
-        i++) { // generates full list of colors from the list of base colors
+         i < BASE_COLORS.length;
+         i++) { // generates full list of colors from the list of base colors
       int[] rgb = Color.of(BASE_COLORS[i]).toIntegerArray();
       COLOR_LIST[i * 4] = Color.of(
           (rgb[0] * 180) / 255,
@@ -59,19 +59,19 @@ public class MapColors {
       ).toBuffer();
     }
   }
-  
+
   public static int getColor(int index) {
     return COLOR_LIST[index];
   }
-  
+
   public static int colorListLength() {
     return COLOR_LIST.length;
   }
-  
+
   public static int getBaseColor(int index) {
     return BASE_COLORS[index];
   }
-  
+
   public static int baseColorListLength() {
     return BASE_COLORS.length;
   }

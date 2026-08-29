@@ -31,41 +31,94 @@ import static com.matt.forgehax.util.AuthHelper.*;
 @RegisterMod
 public class AccountManager extends ServiceMod {
 
+  public static AccountManager INSTANCE;
+  public static char[] masterPassword;
   public final Setting<SecretKeyOptions> mode =
-    getCommandStub()
-      .builders()
-      .<SecretKeyOptions>newSettingEnumBuilder()
-      .name("pw-mode")
-      .description("Master password (safer) or default (secretKey generated automatically and saved on disk).")
-      .defaultTo(SecretKeyOptions.MASTERPASSWORD)
-      .build();
-
+      getCommandStub()
+          .builders()
+          .<SecretKeyOptions>newSettingEnumBuilder()
+          .name("pw-mode")
+          .description("Master password (safer) or default (secretKey generated automatically and saved on disk).")
+          .defaultTo(SecretKeyOptions.MASTERPASSWORD)
+          .build();
   public final Setting<Integer> mpwDelay =
-    getCommandStub()
-      .builders()
-      .<Integer>newSettingBuilder()
-      .name("delay")
-      .description("Delay in ms after which masterPassword is reset, \"0\" to disable.")
-      .defaultTo(120000) // 2 min
-      .min(0)
-      .build();
-
-  public enum SecretKeyOptions {
-    MASTERPASSWORD,
-    DEFAULT
-  }
+      getCommandStub()
+          .builders()
+          .<Integer>newSettingBuilder()
+          .name("delay")
+          .description("Delay in ms after which masterPassword is reset, \"0\" to disable.")
+          .defaultTo(120000) // 2 min
+          .min(0)
+          .build();
+  private final AuthHelper auth = new AuthHelper();
+  private final Session originalSession = FastReflection.Fields.Minecraft_session.get(MC);
+  private final SimpleTimer mpwTimer = new SimpleTimer();
+  public String logInResponse;
 
   public AccountManager() {
     super("AccountManager");
     INSTANCE = this;
   }
 
-  private final AuthHelper auth = new AuthHelper();
-  private final Session originalSession = FastReflection.Fields.Minecraft_session.get(MC);
-  private final SimpleTimer mpwTimer = new SimpleTimer();
-  public static AccountManager INSTANCE;
-  public static char[] masterPassword;
-  public String logInResponse;
+  public static boolean checkForAuthFile() {
+    boolean isFilePresent = false;
+
+    if (directory.exists()) {
+      for (final File fileEntry : Objects.requireNonNull(directory.listFiles())) {
+        if (!fileEntry.isDirectory() && fileEntry.getName().equals(".auth")) {
+          isFilePresent = true;
+        }
+      }
+    } else printError("Failed to locate SavedAccounts folder.");
+
+    return isFilePresent;
+  }
+
+  public static boolean checkForMpwFile() {
+    boolean isFilePresent = false;
+
+    if (directory.exists()) {
+      for (final File fileEntry : Objects.requireNonNull(directory.listFiles())) {
+        if (!fileEntry.isDirectory() && fileEntry.getName().equals(".check")) {
+          isFilePresent = true;
+        }
+      }
+    } else printError("Failed to locate SavedAccounts folder.");
+
+    return isFilePresent;
+  }
+
+  // IV unique per account
+  public static String generateIV() {
+    return RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
+  }
+
+  public static void generateSecretKey() {
+    final File authFile = new File(directory + File.separator + ".auth");
+    final JsonObject authObject = new JsonObject();
+
+    String secretKey = RandomStringUtils.random(64, 0, 0, true, true, null, new SecureRandom());
+    String keySalt = RandomStringUtils.random(64, 0, 0, true, true, null, new SecureRandom());
+
+    authObject.addProperty("keyField", secretKey);
+    authObject.addProperty("saltField", keySalt);
+
+    FileManager.save(authFile, authObject);
+    getLog().info("Saved " + authFile.getName() + " file.");
+  }
+
+  public static void saveEncryptCheck(char[] masterPw) throws IOException {
+    final File checkFile = new File(directory + File.separator + ".check");
+    final JsonObject checkObject = new JsonObject();
+    String mpwIV = generateIV();
+    String mpwCheck = encrypt("Correct!", mpwIV, Arrays.toString(masterPw), getSalt());
+
+    checkObject.addProperty("ivField", mpwIV);
+    checkObject.addProperty("mpwCheckField", mpwCheck);
+
+    FileManager.save(checkFile, checkObject);
+    getLog().info("Saved " + checkFile.getName() + " file.");
+  }
 
   @Override
   protected void onLoad() {
@@ -83,298 +136,300 @@ public class AccountManager extends ServiceMod {
 
     // MASTER PASSWORD
     getCommandStub()
-      .builders()
-      .newCommandBuilder()
-      .name("master-password")
-      .description("Password to submit to allow credentials encryption/decryption.")
-      .processor(
-        data -> {
-          if (masterPassword == null) {
-            data.requiredArguments(1);
-            char[] candidatePassword = data.getArgumentAsString(0).toCharArray();
+        .builders()
+        .newCommandBuilder()
+        .name("master-password")
+        .description("Password to submit to allow credentials encryption/decryption.")
+        .processor(
+            data -> {
+              if (masterPassword == null) {
+                data.requiredArguments(1);
+                char[] candidatePassword = data.getArgumentAsString(0).toCharArray();
 
-            if (!checkForMpwFile() && !checkForAuthFile()) {
-              try {
+                if (!checkForMpwFile() && !checkForAuthFile()) {
+                  try {
 
-                // Saves .check file for masterPassword && .auth file if not present.
-                generateSecretKey();
-                saveEncryptCheck(candidatePassword);
-              } catch (IOException e) {
-                e.printStackTrace();
-              }
-            }
+                    // Saves .check file for masterPassword && .auth file if not present.
+                    generateSecretKey();
+                    saveEncryptCheck(candidatePassword);
+                  } catch (IOException e) {
+                    e.printStackTrace();
+                  }
+                }
 
-            final File checkFile = new File(directory + File.separator + ".check");
+                final File checkFile = new File(directory + File.separator + ".check");
 
-            try {
-              final FileReader fileReader = new FileReader(checkFile);
-              final JsonObject object = new JsonParser().parse(fileReader).getAsJsonObject();
-              fileReader.close();
+                try {
+                  final FileReader fileReader = new FileReader(checkFile);
+                  final JsonObject object = new JsonParser().parse(fileReader).getAsJsonObject();
+                  fileReader.close();
 
-              String check = decrypt(object.get("mpwCheckField").getAsString(),
-                object.get("ivField").getAsString(), Arrays.toString(candidatePassword), getSalt());
+                  String check = decrypt(
+                      object.get("mpwCheckField").getAsString(),
+                      object.get("ivField").getAsString(), Arrays.toString(candidatePassword), getSalt()
+                  );
 
-              if (check != null && check.equals("Correct!")) {
-                masterPassword = candidatePassword;
-                mpwTimer.start();
-                printInform("Master password has been set correctly.");
-              } else printError("Submitted master password is incorrect.");
+                  if (check != null && check.equals("Correct!")) {
+                    masterPassword = candidatePassword;
+                    mpwTimer.start();
+                    printInform("Master password has been set correctly.");
+                  } else printError("Submitted master password is incorrect.");
 
-            } catch (IOException e) {
-              e.printStackTrace();
-            }
-          } else printError("Master password has already been defined.");
-        })
-      .build();
+                } catch (IOException e) {
+                  e.printStackTrace();
+                }
+              } else printError("Master password has already been defined.");
+            })
+        .build();
 
 
     // LOGIN
     getCommandStub()
-      .builders()
-      .newCommandBuilder()
-      .name("login")
-      .description(loginBuilder.toString() + ".")
-      .processor(data -> {
-        data.requiredArguments(1);
-        final String alias = data.getArgumentAsString(0);
+        .builders()
+        .newCommandBuilder()
+        .name("login")
+        .description(loginBuilder + ".")
+        .processor(data -> {
+          data.requiredArguments(1);
+          final String alias = data.getArgumentAsString(0);
 
-        login(alias);
-      })
-      .build();
+          login(alias);
+        })
+        .build();
 
 
     // SAVE
     getCommandStub()
-      .builders()
-      .newCommandBuilder()
-      .name("save")
-      .description(saveBuilder.toString() + ".")
-      .processor(
-        data -> {
-          data.requiredArguments(3);
-          final String alias = data.getArgumentAsString(0);
-          final String email = data.getArgumentAsString(1);
-          final String password = data.getArgumentAsString(2);
-          final String newIV = generateIV();
+        .builders()
+        .newCommandBuilder()
+        .name("save")
+        .description(saveBuilder + ".")
+        .processor(
+            data -> {
+              data.requiredArguments(3);
+              final String alias = data.getArgumentAsString(0);
+              final String email = data.getArgumentAsString(1);
+              final String password = data.getArgumentAsString(2);
+              final String newIV = generateIV();
 
-          if (alias.startsWith(".")) {
-            printWarning("Invalid alias.");
-            return;
-          }
+              if (alias.startsWith(".")) {
+                printWarning("Invalid alias.");
+                return;
+              }
 
-          // Checks if .auth is present, if not it generates a new one
-          if (!checkForAuthFile()) {
-            printError("Auth file is missing, regenerating keys...");
-            printInform("If you're saving an account for the first time, it's all good.");
-            generateSecretKey();
-          }
+              // Checks if .auth is present, if not it generates a new one
+              if (!checkForAuthFile()) {
+                printError("Auth file is missing, regenerating keys...");
+                printInform("If you're saving an account for the first time, it's all good.");
+                generateSecretKey();
+              }
 
-          // Check if the delay for timer has elapsed
-          checkTimer();
+              // Check if the delay for timer has elapsed
+              checkTimer();
 
-          final File account = new File(directory.getAbsolutePath() + "/" + alias + ".json");
-          final JsonObject object = new JsonObject();
+              final File account = new File(directory.getAbsolutePath() + "/" + alias + ".json");
+              final JsonObject object = new JsonObject();
 
-          // Creates new file if it doesn't exist
-          if (!account.exists()) {
-            try {
-              object.addProperty("alias", (String) data.arguments().get(0));
-              object.addProperty("iv", newIV);
-              object.addProperty("credentials", encrypt(createAccount(email, password), newIV, getSecretKey(), getSalt()));
-
-              if (directory.exists()) {
-                if (getSecretKey() != null) {
-                  FileManager.save(account, object);
-                  printInform("Saved new account: %s.", alias);
-                } else printError("Master password or default password is blank.");
-              } else printError("Failed to locate SavedAccounts folder.");
-
-            } catch (IOException e) {
-              e.printStackTrace();
-              printError("Failed to locate .auth file.");
-              printInform("The exception is: %s.", e.getMessage());
-            }
-          } else {
-            try {
-              final FileReader fileReader = new FileReader(account);
-              final JsonObject objectReader = new JsonParser().parse(fileReader).getAsJsonObject();
-              fileReader.close();
-
-              String credentials = decrypt(objectReader.get("credentials").getAsString(), getIV(alias), getSecretKey(), getSalt());
-              getLog().info("Credentials decrypted (for credentials comparison).");
-
-              // Gets credentials
-              if (credentials != null) {
-                final JsonObject objectCred = new JsonParser().parse(credentials).getAsJsonObject();
-
-                String emailIn = objectCred.get("email").getAsString();
-                String passwordIn = objectCred.get("password").getAsString();
-
-                // Compare submitted data with already existing data
-                if (email.equalsIgnoreCase(emailIn) && password.equals(passwordIn)) {
-                  printMessage("Credentials for \"%s\" didn't change.", alias);
-                } else {
-                  if (email.equalsIgnoreCase(emailIn)) {
-                    getLog().info("Email for \"" + alias + "\" didn't change.");
-                  } else if (password.equals(passwordIn)) {
-                    getLog().info("Password for \"" + alias + "\" didn't change.");
-                  }
-
-                  // Saves the data that did change
+              // Creates new file if it doesn't exist
+              if (!account.exists()) {
+                try {
                   object.addProperty("alias", (String) data.arguments().get(0));
-                  object.addProperty("iv", getIV(alias));
-                  object.addProperty("credentials", encrypt(createAccount(email, password), getIV(alias), getSecretKey(), getSalt()));
-                  getLog().info("Credentials encrypted (account was edited).");
+                  object.addProperty("iv", newIV);
+                  object.addProperty("credentials", encrypt(createAccount(email, password), newIV, getSecretKey(), getSalt()));
 
                   if (directory.exists()) {
                     if (getSecretKey() != null) {
                       FileManager.save(account, object);
-                      printInform("Successfully edited account \"%s\".", alias);
+                      printInform("Saved new account: %s.", alias);
                     } else printError("Master password or default password is blank.");
                   } else printError("Failed to locate SavedAccounts folder.");
+
+                } catch (IOException e) {
+                  e.printStackTrace();
+                  printError("Failed to locate .auth file.");
+                  printInform("The exception is: %s.", e.getMessage());
                 }
-              } else printError("Failed to decrypt credentials.");
-            } catch (IOException e) {
-              e.printStackTrace();
-              printError("Failed to load \"%s\".json file.", alias);
-              printInform("The exception is: %s.", e.getMessage());
-            }
-          }
-        })
-      .build();
+              } else {
+                try {
+                  final FileReader fileReader = new FileReader(account);
+                  final JsonObject objectReader = new JsonParser().parse(fileReader).getAsJsonObject();
+                  fileReader.close();
+
+                  String credentials = decrypt(objectReader.get("credentials").getAsString(), getIV(alias), getSecretKey(), getSalt());
+                  getLog().info("Credentials decrypted (for credentials comparison).");
+
+                  // Gets credentials
+                  if (credentials != null) {
+                    final JsonObject objectCred = new JsonParser().parse(credentials).getAsJsonObject();
+
+                    String emailIn = objectCred.get("email").getAsString();
+                    String passwordIn = objectCred.get("password").getAsString();
+
+                    // Compare submitted data with already existing data
+                    if (email.equalsIgnoreCase(emailIn) && password.equals(passwordIn)) {
+                      printMessage("Credentials for \"%s\" didn't change.", alias);
+                    } else {
+                      if (email.equalsIgnoreCase(emailIn)) {
+                        getLog().info("Email for \"" + alias + "\" didn't change.");
+                      } else if (password.equals(passwordIn)) {
+                        getLog().info("Password for \"" + alias + "\" didn't change.");
+                      }
+
+                      // Saves the data that did change
+                      object.addProperty("alias", (String) data.arguments().get(0));
+                      object.addProperty("iv", getIV(alias));
+                      object.addProperty("credentials", encrypt(createAccount(email, password), getIV(alias), getSecretKey(), getSalt()));
+                      getLog().info("Credentials encrypted (account was edited).");
+
+                      if (directory.exists()) {
+                        if (getSecretKey() != null) {
+                          FileManager.save(account, object);
+                          printInform("Successfully edited account \"%s\".", alias);
+                        } else printError("Master password or default password is blank.");
+                      } else printError("Failed to locate SavedAccounts folder.");
+                    }
+                  } else printError("Failed to decrypt credentials.");
+                } catch (IOException e) {
+                  e.printStackTrace();
+                  printError("Failed to load \"%s\".json file.", alias);
+                  printInform("The exception is: %s.", e.getMessage());
+                }
+              }
+            })
+        .build();
 
 
     // DELETE
     getCommandStub()
-      .builders()
-      .newCommandBuilder()
-      .name("delete")
-      .description("<alias> for a single account, \"*\" for all files.")
-      .processor(
-        data -> {
-          data.requiredArguments(1);
-          String alias = data.getArgumentAsString(0);
-          final File account = new File(directory + File.separator + alias + ".json");
+        .builders()
+        .newCommandBuilder()
+        .name("delete")
+        .description("<alias> for a single account, \"*\" for all files.")
+        .processor(
+            data -> {
+              data.requiredArguments(1);
+              String alias = data.getArgumentAsString(0);
+              final File account = new File(directory + File.separator + alias + ".json");
 
-          if (alias.equals("*")) {
-            for (final File fileEntry : Objects.requireNonNull(directory.listFiles())) {
-              if (!fileEntry.isDirectory()) {
-                fileEntry.getAbsoluteFile().delete();
-                getLog().info("Deleted " + fileEntry.getName());
-              }
-            }
+              if (alias.equals("*")) {
+                for (final File fileEntry : Objects.requireNonNull(directory.listFiles())) {
+                  if (!fileEntry.isDirectory()) {
+                    fileEntry.getAbsoluteFile().delete();
+                    getLog().info("Deleted " + fileEntry.getName());
+                  }
+                }
 
-            printInform("Deleted all saved accounts.");
-          } else if (account.exists()) {
-            account.delete();
-            printInform("Deleted account \"%s\".", alias);
-          } else printError("Couldn't find \"%s\".", alias);
-        })
-      .build();
+                printInform("Deleted all saved accounts.");
+              } else if (account.exists()) {
+                account.delete();
+                printInform("Deleted account \"%s\".", alias);
+              } else printError("Couldn't find \"%s\".", alias);
+            })
+        .build();
 
 
     // RESTORE
     getCommandStub()
-      .builders()
-      .newCommandBuilder()
-      .name("restore")
-      .description("Switch back to the original session.")
-      .processor(
-        data -> {
-          String getSessionUsername = FastReflection.Fields.Minecraft_session.get(MC).getUsername();
+        .builders()
+        .newCommandBuilder()
+        .name("restore")
+        .description("Switch back to the original session.")
+        .processor(
+            data -> {
+              String getSessionUsername = FastReflection.Fields.Minecraft_session.get(MC).getUsername();
 
-          if (!getSessionUsername.equals(originalSession.getUsername())) {
-            auth.setSession(originalSession);
-            printInform("Successfully switched to the original session.");
-          } else printMessage("Session didn't change.");
-        })
-      .build();
+              if (!getSessionUsername.equals(originalSession.getUsername())) {
+                auth.setSession(originalSession);
+                printInform("Successfully switched to the original session.");
+              } else printMessage("Session didn't change.");
+            })
+        .build();
 
 
     // LIST
     getCommandStub()
-      .builders()
-      .newCommandBuilder()
-      .name("list")
-      .description("Lists all saved accounts.")
-      .processor(
-        data -> {
-          if (directory.exists()) {
+        .builders()
+        .newCommandBuilder()
+        .name("list")
+        .description("Lists all saved accounts.")
+        .processor(
+            data -> {
+              if (directory.exists()) {
 
-            if (Objects.requireNonNull(new File(String.valueOf(directory)).listFiles()).length < 3) {
-              printMessage("No accounts found.");
-            } else {
+                if (Objects.requireNonNull(new File(String.valueOf(directory)).listFiles()).length < 3) {
+                  printMessage("No accounts found.");
+                } else {
 
-              // Accounts found
-              printMessage("Saved accounts (by alias):");
+                  // Accounts found
+                  printMessage("Saved accounts (by alias):");
 
-              for (final File fileEntry : Objects.requireNonNull(directory.listFiles())) {
-                if (!fileEntry.isDirectory() && fileEntry.getName().endsWith(".json")) {
-                  data.write(fileEntry.getName().replace(".json", ""));
+                  for (final File fileEntry : Objects.requireNonNull(directory.listFiles())) {
+                    if (!fileEntry.isDirectory() && fileEntry.getName().endsWith(".json")) {
+                      data.write(fileEntry.getName().replace(".json", ""));
+                    }
+                  }
                 }
-              }
-            }
-          } else printError("Failed to locate SavedAccounts folder.");
-        })
-      .build();
+              } else printError("Failed to locate SavedAccounts folder.");
+            })
+        .build();
 
 
     // COUNT
     getCommandStub()
-      .builders()
-      .newCommandBuilder()
-      .name("count")
-      .description("Prints the number of all saved accounts.")
-      .processor(
-        data -> {
-          if (directory.exists()) {
-            int count = 0;
+        .builders()
+        .newCommandBuilder()
+        .name("count")
+        .description("Prints the number of all saved accounts.")
+        .processor(
+            data -> {
+              if (directory.exists()) {
+                int count = 0;
 
-            for (final File fileEntry : Objects.requireNonNull(directory.listFiles())) {
-              if (!fileEntry.isDirectory() && fileEntry.getName().endsWith(".json")) {
-                count++;
-              }
-            }
+                for (final File fileEntry : Objects.requireNonNull(directory.listFiles())) {
+                  if (!fileEntry.isDirectory() && fileEntry.getName().endsWith(".json")) {
+                    count++;
+                  }
+                }
 
-            if (count != 0) {
-              printInform("Number of saved accounts: %s.", count);
-            } else printMessage("No accounts found.");
-          } else printError("Failed to locate SavedAccounts folder.");
-        })
-      .build();
+                if (count != 0) {
+                  printInform("Number of saved accounts: %s.", count);
+                } else printMessage("No accounts found.");
+              } else printError("Failed to locate SavedAccounts folder.");
+            })
+        .build();
 
 
     // WHO AM I
     getCommandStub()
-      .builders()
-      .newCommandBuilder()
-      .name("whoami")
-      .description("Prints the name of the account you're currently using.")
-      .processor(data -> printInform("Currently logged in as: %s.", FastReflection.Fields.Minecraft_session.get(MC).getUsername()))
-      .build();
+        .builders()
+        .newCommandBuilder()
+        .name("whoami")
+        .description("Prints the name of the account you're currently using.")
+        .processor(data -> printInform("Currently logged in as: %s.", FastReflection.Fields.Minecraft_session.get(MC).getUsername()))
+        .build();
 
 
     // RESET KEYS
     getCommandStub()
-      .builders()
-      .newCommandBuilder()
-      .name("regen-key")
-      .description("Resets secretKey & salt (useful for debugging).")
-      .processor(
-        data -> {
-          if (directory.exists()) {
+        .builders()
+        .newCommandBuilder()
+        .name("regen-key")
+        .description("Resets secretKey & salt (useful for debugging).")
+        .processor(
+            data -> {
+              if (directory.exists()) {
 
-            // Checks for auth files
-            if (checkForAuthFile()) {
-              printInform(".auth file is already present.");
-              return;
-            }
+                // Checks for auth files
+                if (checkForAuthFile()) {
+                  printInform(".auth file is already present.");
+                  return;
+                }
 
-            generateSecretKey();
-            printInform("Successfully regenerated .auth file.");
-          } else printError("Failed to locate SavedAccounts folder.");
-        })
-      .build();
+                generateSecretKey();
+                printInform("Successfully regenerated .auth file.");
+              } else printError("Failed to locate SavedAccounts folder.");
+            })
+        .build();
   }
 
   public boolean login(String alias) {
@@ -443,66 +498,6 @@ public class AccountManager extends ServiceMod {
     }
   }
 
-  public static boolean checkForAuthFile() {
-    boolean isFilePresent = false;
-
-    if (directory.exists()) {
-      for (final File fileEntry : Objects.requireNonNull(directory.listFiles())) {
-        if (!fileEntry.isDirectory() && fileEntry.getName().equals(".auth")) {
-          isFilePresent = true;
-        }
-      }
-    } else printError("Failed to locate SavedAccounts folder.");
-
-    return isFilePresent;
-  }
-
-  public static boolean checkForMpwFile() {
-    boolean isFilePresent = false;
-
-    if (directory.exists()) {
-      for (final File fileEntry : Objects.requireNonNull(directory.listFiles())) {
-        if (!fileEntry.isDirectory() && fileEntry.getName().equals(".check")) {
-          isFilePresent = true;
-        }
-      }
-    } else printError("Failed to locate SavedAccounts folder.");
-
-    return isFilePresent;
-  }
-
-  // IV unique per account
-  public static String generateIV() {
-    return RandomStringUtils.random(16, 0, 0, true, true, null, new SecureRandom());
-  }
-
-  public static void generateSecretKey() {
-    final File authFile = new File(directory + File.separator + ".auth");
-    final JsonObject authObject = new JsonObject();
-
-    String secretKey = RandomStringUtils.random(64, 0, 0, true, true, null, new SecureRandom());
-    String keySalt = RandomStringUtils.random(64, 0, 0, true, true, null, new SecureRandom());
-
-    authObject.addProperty("keyField", secretKey);
-    authObject.addProperty("saltField", keySalt);
-
-    FileManager.save(authFile, authObject);
-    getLog().info("Saved " + authFile.getName() + " file.");
-  }
-
-  public static void saveEncryptCheck(char[] masterPw) throws IOException {
-    final File checkFile = new File(directory + File.separator + ".check");
-    final JsonObject checkObject = new JsonObject();
-    String mpwIV = generateIV();
-    String mpwCheck = encrypt("Correct!", mpwIV, Arrays.toString(masterPw), getSalt());
-
-    checkObject.addProperty("ivField", mpwIV);
-    checkObject.addProperty("mpwCheckField", mpwCheck);
-
-    FileManager.save(checkFile, checkObject);
-    getLog().info("Saved " + checkFile.getName() + " file.");
-  }
-
   // Serialized json with email & password
   public String createAccount(String email, String password) {
     final JsonObject object = new JsonObject();
@@ -511,5 +506,10 @@ public class AccountManager extends ServiceMod {
 
     Gson gson = new Gson();
     return gson.toJson(object);
+  }
+
+  public enum SecretKeyOptions {
+    MASTERPASSWORD,
+    DEFAULT
   }
 }

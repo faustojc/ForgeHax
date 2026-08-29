@@ -1,8 +1,5 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getLocalPlayer;
-import static com.matt.forgehax.Helper.getNetworkManager;
-
 import com.matt.forgehax.asm.events.PacketEvent;
 import com.matt.forgehax.asm.reflection.FastReflection;
 import com.matt.forgehax.util.PacketHelper;
@@ -12,15 +9,18 @@ import com.matt.forgehax.util.mod.loader.RegisterMod;
 import net.minecraft.network.play.client.CPacketPlayer;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
+import static com.matt.forgehax.Helper.getLocalPlayer;
+import static com.matt.forgehax.Helper.getNetworkManager;
+
 @RegisterMod
 public class NoFallMod extends ToggleMod {
-  
+
+  private float lastFallDistance = 0;
+
   public NoFallMod() {
     super(Category.PLAYER, "NoFall", false, "Prevents fall damage from being taken");
   }
-  
-  private float lastFallDistance = 0;
-  
+
   @SubscribeEvent
   public void onPacketSend(PacketEvent.Outgoing.Pre event) {
     if (event.getPacket() instanceof CPacketPlayer
@@ -35,7 +35,8 @@ public class NoFallMod extends ToggleMod {
                 ((CPacketPlayer) event.getPacket()).getZ(0),
                 ((CPacketPlayer) event.getPacket()).getYaw(0),
                 ((CPacketPlayer) event.getPacket()).getPitch(0),
-                true);
+                true
+            );
         CPacketPlayer reposition =
             new CPacketPlayer.PositionRotation(
                 ((CPacketPlayer) event.getPacket()).getX(0),
@@ -43,7 +44,8 @@ public class NoFallMod extends ToggleMod {
                 ((CPacketPlayer) event.getPacket()).getZ(0),
                 ((CPacketPlayer) event.getPacket()).getYaw(0),
                 ((CPacketPlayer) event.getPacket()).getPitch(0),
-                true);
+                true
+            );
         PacketHelper.ignore(packet);
         PacketHelper.ignore(reposition);
         getNetworkManager().sendPacket(packet);

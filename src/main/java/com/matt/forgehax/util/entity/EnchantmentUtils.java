@@ -2,15 +2,16 @@ package com.matt.forgehax.util.entity;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import net.minecraft.enchantment.Enchantment;
+import net.minecraft.nbt.NBTTagList;
+
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import net.minecraft.enchantment.Enchantment;
-import net.minecraft.nbt.NBTTagList;
 
 public class EnchantmentUtils {
-  
+
   public static List<EntityEnchantment> getEnchantments(NBTTagList tags) {
     if (tags == null) {
       return null;
@@ -23,7 +24,7 @@ public class EnchantmentUtils {
     }
     return list;
   }
-  
+
   public static List<EntityEnchantment> getEnchantmentsSorted(NBTTagList tags) {
     List<EntityEnchantment> list = getEnchantments(tags);
     if (list != null) {
@@ -31,11 +32,11 @@ public class EnchantmentUtils {
     }
     return list;
   }
-  
+
   // IV.sort(III)
-  
+
   public static class EnchantSort implements Comparator<EntityEnchantment> {
-    
+
     @Override
     public int compare(EntityEnchantment o1, EntityEnchantment o2) {
       int deltaEch1 = o1.getEnchantment().getMaxLevel() - o1.getEnchantment().getMinLevel();
@@ -49,11 +50,11 @@ public class EnchantmentUtils {
       }
     }
   }
-  
+
   public static class EntityEnchantment {
-    
+
     private static final Map<Integer, String> SHORT_ENCHANT_NAMES = Maps.newHashMap();
-    
+
     static {
       SHORT_ENCHANT_NAMES.put(0, "p");
       SHORT_ENCHANT_NAMES.put(1, "fp");
@@ -83,27 +84,27 @@ public class EnchantmentUtils {
       SHORT_ENCHANT_NAMES.put(62, "lur");
       SHORT_ENCHANT_NAMES.put(70, "mend");
     }
-    
+
     private final Enchantment enchantment;
     private final int level;
-    
+
     public EntityEnchantment(int id, int level) {
       this(Enchantment.getEnchantmentByID(id), level);
     }
-    
+
     public EntityEnchantment(Enchantment enchantment, int level) {
       this.enchantment = enchantment;
       this.level = level;
     }
-    
+
     public Enchantment getEnchantment() {
       return enchantment;
     }
-    
+
     public int getLevel() {
       return level;
     }
-    
+
     public String getShortName() {
       int id = Enchantment.getEnchantmentID(enchantment);
       if (SHORT_ENCHANT_NAMES.containsKey(id)) {
@@ -116,7 +117,7 @@ public class EnchantmentUtils {
         return toString();
       }
     }
-    
+
     public String toString() {
       return enchantment.getTranslatedName(level);
     }

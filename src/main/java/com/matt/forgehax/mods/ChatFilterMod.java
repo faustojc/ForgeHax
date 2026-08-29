@@ -37,6 +37,11 @@ public class ChatFilterMod extends ToggleMod {
     super(Category.MISC, "ChatFilter", false, "Filter chat by regex");
   }
 
+  private static boolean partialMatch(Pattern pattern, String str) {
+    final Matcher m = pattern.matcher(str);
+    return m.find();
+  }
+
   @SubscribeEvent
   public void onChatMessage(PacketEvent.Incoming.Pre event) {
     if (event.getPacket() instanceof SPacketChat) {
@@ -44,21 +49,15 @@ public class ChatFilterMod extends ToggleMod {
       final String message = packet.getChatComponent().getUnformattedText();
 
       final boolean shouldFilter = filterList.stream()
-          .map(FilterEntry::getRegex)
-          .map(regex -> patternCache.computeIfAbsent(regex, Pattern::compile))
-          .anyMatch(pattern -> partialMatch(pattern, message));
+                                             .map(FilterEntry::getRegex)
+                                             .map(regex -> patternCache.computeIfAbsent(regex, Pattern::compile))
+                                             .anyMatch(pattern -> partialMatch(pattern, message));
 
       if (shouldFilter) {
         event.setCanceled(true);
       }
     }
   }
-
-  private static boolean partialMatch(Pattern pattern, String str) {
-    final Matcher m = pattern.matcher(str);
-    return m.find();
-  }
-
 
   @Override
   protected void onLoad() {
@@ -144,8 +143,8 @@ public class ChatFilterMod extends ToggleMod {
     }
 
     @Override
-    public void deserialize(JsonReader reader)  {
-      this.regex  = new JsonParser().parse(reader).getAsString();
+    public void deserialize(JsonReader reader) {
+      this.regex = new JsonParser().parse(reader).getAsString();
     }
 
     @Override
@@ -175,7 +174,7 @@ public class ChatFilterMod extends ToggleMod {
 
     @Override
     public boolean contains(Object o) {
-      return map.containsKey(((FilterEntry)o).name);
+      return map.containsKey(((FilterEntry) o).name);
     }
 
     @Override
@@ -200,7 +199,7 @@ public class ChatFilterMod extends ToggleMod {
 
     @Override
     public boolean remove(Object o) {
-      return map.remove(((FilterEntry)o).name) != null;
+      return map.remove(((FilterEntry) o).name) != null;
     }
 
     @Override

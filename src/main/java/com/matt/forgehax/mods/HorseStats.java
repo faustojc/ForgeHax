@@ -1,8 +1,5 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getLocalPlayer;
-import static com.matt.forgehax.Helper.getRidingEntity;
-
 import com.matt.forgehax.asm.reflection.FastReflection;
 import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.entity.EntityUtils;
@@ -15,16 +12,15 @@ import net.minecraft.entity.passive.AbstractHorse;
 import net.minecraftforge.event.entity.living.LivingEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
+import static com.matt.forgehax.Helper.getLocalPlayer;
+import static com.matt.forgehax.Helper.getRidingEntity;
+
 /**
  * Created by Babbaj on 9/1/2017.
  */
 @RegisterMod
 public class HorseStats extends ToggleMod {
-  
-  public HorseStats() {
-    super(Category.PLAYER, "HorseStats", false, "Change the stats of your horse");
-  }
-  
+
   private final Setting<Double> jumpHeight =
       getCommandStub()
           .builders()
@@ -41,7 +37,6 @@ public class HorseStats extends ToggleMod {
           .description("Modified horse speed attribute. Default: 0.3375")
           .defaultTo(0.3375D)
           .build();
-  
   private final Setting<Double> multiplier =
       getCommandStub()
           .builders()
@@ -50,19 +45,23 @@ public class HorseStats extends ToggleMod {
           .description("multiplier while sprinting")
           .defaultTo(1.0D)
           .build();
-  
+
+  public HorseStats() {
+    super(Category.PLAYER, "HorseStats", false, "Change the stats of your horse");
+  }
+
   @Override
   public void onDisabled() {
     if (getRidingEntity() instanceof AbstractHorse) {
       applyStats(jumpHeight.getDefault(), speed.getDefault());
     }
   }
-  
+
   @SubscribeEvent
   public void onLivingUpdate(LivingEvent.LivingUpdateEvent event) {
     if (EntityUtils.isDrivenByPlayer(event.getEntity())
         && getRidingEntity() instanceof AbstractHorse) {
-      
+
       double newSpeed = speed.getAsDouble();
       if (getLocalPlayer().isSprinting()) {
         newSpeed *= multiplier.getAsDouble();
@@ -70,13 +69,13 @@ public class HorseStats extends ToggleMod {
       applyStats(jumpHeight.getAsDouble(), newSpeed);
     }
   }
-  
+
   private void applyStats(double newJump, double newSpeed) {
     final IAttribute jump_strength =
         FastReflection.Fields.AbstractHorse_JUMP_STRENGTH.get(getRidingEntity());
     final IAttribute movement_speed =
         FastReflection.Fields.SharedMonsterAttributes_MOVEMENT_SPEED.get(getRidingEntity());
-    
+
     ((EntityLivingBase) getRidingEntity())
         .getEntityAttribute(jump_strength)
         .setBaseValue(newJump);

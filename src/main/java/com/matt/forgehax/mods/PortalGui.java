@@ -13,11 +13,11 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
  */
 @RegisterMod
 public class PortalGui extends ToggleMod {
-  
+
   public PortalGui() {
     super(Category.PLAYER, "PortalGui", false, "Guis work while in portals");
   }
-  
+
   @SubscribeEvent
   public void onLocalPlayerUpdate(LocalPlayerUpdateEvent event) {
     FastReflection.Fields.Entity_inPortal.set(Helper.getLocalPlayer(), false);

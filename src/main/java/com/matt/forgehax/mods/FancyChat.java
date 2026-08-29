@@ -1,38 +1,29 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getNetworkManager;
-import static com.matt.forgehax.Helper.printError;
-
 import com.matt.forgehax.asm.events.PacketEvent;
 import com.matt.forgehax.util.PacketHelper;
 import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
+import net.minecraft.network.play.client.CPacketChatMessage;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+
 import java.util.HashMap;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
-import net.minecraft.network.play.client.CPacketChatMessage;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+
+import static com.matt.forgehax.Helper.getNetworkManager;
+import static com.matt.forgehax.Helper.printError;
 
 // made by BABBAJ
 
 @RegisterMod
 public class FancyChat extends ToggleMod {
-  
-  private enum MODE {
-    FULL_WIDTH,
-    CIRCLE,
-    PARENTHESES,
-    SMALL,
-    LEET,
-    WAVE,
-    RANDOMCASE
-  }
-  
+
   private static final String alphabet =
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   private static final int[][] FONT = {
@@ -72,12 +63,11 @@ public class FancyChat extends ToggleMod {
           0x2B7, 0x2E3, 0x2B8, 0x1DBB, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39
       }
   };
-  
   // Uppercase Lookup for LEET
-  private static HashMap<Integer, String> LeetMap = new HashMap<>();
+  private static final HashMap<Integer, String> LeetMap = new HashMap<>();
   // Custom probability for rarely used LEET replacements
-  private static HashMap<Integer, Integer> LeetProbability = new HashMap<>();
-  
+  private static final HashMap<Integer, Integer> LeetProbability = new HashMap<>();
+
   static {
     LeetMap.put(65, "4");
     LeetMap.put(69, "3");
@@ -114,7 +104,7 @@ public class FancyChat extends ToggleMod {
     LeetMap.put(88, "><");
     LeetProbability.put(88, 50);
   }
-  
+
   private final Setting<MODE> font =
       getCommandStub()
           .builders()
@@ -123,9 +113,18 @@ public class FancyChat extends ToggleMod {
           .description("Font to use")
           .defaultTo(MODE.FULL_WIDTH)
           .build();
-  
   private Pattern prefixPattern;
-  private final Setting<String> prefixRegexp =
+  private Pattern command0ArgPattern;
+  private Pattern command1ArgPattern;
+
+  public FancyChat() {
+    super(Category.MISC, "FancyChat", false, "meme text");
+  }
+
+  @Override
+  protected void onLoad() {
+    compileMessagePatterns();
+  }  private final Setting<String> prefixRegexp =
       getCommandStub()
           .builders()
           .<String>newSettingBuilder()
@@ -147,9 +146,133 @@ public class FancyChat extends ToggleMod {
                 }
               })
           .build();
-  
-  private Pattern command0ArgPattern;
-  private final Setting<String> command0ArgRegexp =
+
+  private void compileMessagePatterns() {
+    prefixPattern = Pattern.compile("(^" + prefixRegexp.get() + ")(\\w+)");
+    command0ArgPattern = Pattern.compile("(" + command0ArgRegexp.get() + ")");
+    command1ArgPattern = Pattern.compile("(" + command1ArgRegexp.get() + ")");
+  }
+
+  @SubscribeEvent
+  public void onPacketSent(PacketEvent.Outgoing.Pre event) {
+    if (event.getPacket() instanceof CPacketChatMessage
+        && !PacketHelper.isIgnored(event.getPacket())) {
+
+      boolean is0Arg = false;
+      boolean is1Arg = false;
+      boolean isIgnore = false;
+
+      String prefix = "";
+      String command = "";
+      String message;
+      String arg1 = "";
+
+      String inputMessage = ((CPacketChatMessage) event.getPacket()).getMessage();
+
+      Matcher prefixMatcher = prefixPattern.matcher(inputMessage);
+      if (prefixMatcher.find()) {
+        prefix = prefixMatcher.group(1);
+        command = prefixMatcher.group(2);
+
+        Matcher cmd0ArgMatcher = command0ArgPattern.matcher(command);
+        Matcher cmd1ArgMatcher = command1ArgPattern.matcher(command);
+
+        // if command is found, make sure the match is not just a substring
+        if (cmd0ArgMatcher.find() && command.length() == cmd0ArgMatcher.group().length()) {
+          is0Arg = true;
+          message = inputMessage.substring(prefixMatcher.end());
+
+        } else if (cmd1ArgMatcher.find() && command.length() == cmd1ArgMatcher.group().length()) {
+          is1Arg = true;
+          Matcher arg1Matcher = Pattern.compile(" .+? ").matcher(inputMessage);
+
+          if (arg1Matcher.find()) {
+            arg1 = inputMessage.substring(arg1Matcher.start(), arg1Matcher.end()).trim();
+            message = inputMessage.substring(arg1Matcher.end());
+          } else {
+            isIgnore = true;
+            message = inputMessage;
+          }
+
+        } else {
+          message = inputMessage;
+          // Completely ignore all unknown commands
+          isIgnore = true;
+        }
+      } else {
+        message = inputMessage;
+      }
+
+      if (!isIgnore) {
+        String messageOut = prettify(message);
+
+        if (is0Arg) {
+          messageOut = prefix + command + " " + messageOut;
+        } else if (is1Arg) {
+          messageOut = prefix + command + " " + arg1 + " " + messageOut;
+        }
+
+        if (getNetworkManager() != null) {
+          CPacketChatMessage packet = new CPacketChatMessage(messageOut);
+          PacketHelper.ignore(packet);
+          getNetworkManager().sendPacket(packet);
+          event.setCanceled(true);
+        }
+      }
+    }
+  }
+
+  private String makeLeet(String message) {
+    char[] messageArray;
+
+    message = message.replaceAll("(?i)dude", "d00d").replaceAll("(^|\\s)ph", "$1f");
+
+    messageArray = message.toCharArray();
+    // match and replace the last only S in a word
+    Matcher zMatcher = Pattern.compile("(?<![sS])([sS])(?:[^\\w]|$)").matcher(message);
+
+    while (!zMatcher.hitEnd()) {
+      if (zMatcher.find()) {
+        if (zMatcher.group(1).equals("s")) {
+          messageArray[zMatcher.end(1) - 1] = 'z';
+        } else {
+          messageArray[zMatcher.end(1) - 1] = 'Z';
+        }
+      }
+    }
+
+    StringBuilder builder = new StringBuilder();
+    Random random = new Random();
+    for (char c : messageArray) {
+      int key = Character.toUpperCase(c);
+      // half the probability for LEET
+      if (random.nextInt(2) == 0
+          && LeetMap.get(key) != null
+          && (LeetProbability.get(key) == null
+          || LeetProbability.get(key) > random.nextInt(100))) {
+        builder.append(LeetMap.get(key));
+      } else {
+        builder.append(c);
+      }
+    }
+
+    return builder.toString();
+  }
+
+  private String makeWave(String message) {
+    char[] messageArray = message.toCharArray();
+    ThreadLocalRandom rand = ThreadLocalRandom.current();
+    double span = rand.nextDouble(0.4D, 1.3D);
+    double xoff = rand.nextDouble(0, 32);
+    double yoff = rand.nextDouble(-0.4, 0.6);
+
+    for (int i = 0; i < messageArray.length; i++) {
+      if (waveCharIsUpper(i, span, xoff, yoff)) {
+        messageArray[i] = Character.toUpperCase(messageArray[i]);
+      }
+    }
+    return new String(messageArray);
+  }  private final Setting<String> command0ArgRegexp =
       getCommandStub()
           .builders()
           .<String>newSettingBuilder()
@@ -171,9 +294,53 @@ public class FancyChat extends ToggleMod {
                 }
               })
           .build();
-  
-  private Pattern command1ArgPattern;
-  private final Setting<String> command1ArgRegexp =
+
+  private String randomCase(String message) {
+    char[] messageArray = message.toCharArray();
+    ThreadLocalRandom rand = ThreadLocalRandom.current();
+
+    for (int i = 0; i < messageArray.length; i++) {
+      if (rand.nextBoolean()) {
+        messageArray[i] = Character.toUpperCase(messageArray[i]);
+      } else {
+        messageArray[i] = Character.toLowerCase(messageArray[i]);
+      }
+    }
+    return new String(messageArray);
+  }
+
+  private boolean waveCharIsUpper(double x, double span, double xoff, double yoff) {
+    // defaults: span = 0.4, xoff=0, yoff=-0.5
+    return Math.sin(x * span + xoff) + yoff > 0;
+  }
+
+  private String changeAlphabet(String message, MODE fontType) {
+    char[] messageArray = message.toCharArray();
+    int[] currentFont = FONT[fontType.ordinal()];
+    int i = 0;
+
+    for (char c : messageArray) {
+      int letterKey = alphabet.indexOf(c);
+      if (letterKey != -1 && (c != (char) 0x3E)) {
+        messageArray[i] = (char) currentFont[letterKey];
+      }
+      i++;
+    }
+    return new String(messageArray);
+  }
+
+  public String prettify(String message) {
+    switch (font.get()) {
+      case LEET:
+        return makeLeet(message);
+      case WAVE:
+        return makeWave(message);
+      case RANDOMCASE:
+        return randomCase(message);
+      default:
+        return changeAlphabet(message, font.get());
+    }
+  }  private final Setting<String> command1ArgRegexp =
       getCommandStub()
           .builders()
           .<String>newSettingBuilder()
@@ -195,187 +362,22 @@ public class FancyChat extends ToggleMod {
                 }
               })
           .build();
-  
-  public FancyChat() {
-    super(Category.MISC, "FancyChat", false, "meme text");
+
+  private enum MODE {
+    FULL_WIDTH,
+    CIRCLE,
+    PARENTHESES,
+    SMALL,
+    LEET,
+    WAVE,
+    RANDOMCASE
   }
-  
-  @Override
-  protected void onLoad() {
-    compileMessagePatterns();
-  }
-  
-  private void compileMessagePatterns() {
-    prefixPattern = Pattern.compile("(^" + prefixRegexp.get() + ")(\\w+)");
-    command0ArgPattern = Pattern.compile("(" + command0ArgRegexp.get() + ")");
-    command1ArgPattern = Pattern.compile("(" + command1ArgRegexp.get() + ")");
-  }
-  
-  @SubscribeEvent
-  public void onPacketSent(PacketEvent.Outgoing.Pre event) {
-    if (event.getPacket() instanceof CPacketChatMessage
-        && !PacketHelper.isIgnored(event.getPacket())) {
-      
-      boolean is0Arg = false;
-      boolean is1Arg = false;
-      boolean isIgnore = false;
-      
-      String prefix = "";
-      String command = "";
-      String message;
-      String arg1 = "";
-      
-      String inputMessage = ((CPacketChatMessage) event.getPacket()).getMessage();
-      
-      Matcher prefixMatcher = prefixPattern.matcher(inputMessage);
-      if (prefixMatcher.find()) {
-        prefix = prefixMatcher.group(1);
-        command = prefixMatcher.group(2);
-        
-        Matcher cmd0ArgMatcher = command0ArgPattern.matcher(command);
-        Matcher cmd1ArgMatcher = command1ArgPattern.matcher(command);
-        
-        // if command is found, make sure the match is not just a substring
-        if (cmd0ArgMatcher.find() && command.length() == cmd0ArgMatcher.group().length()) {
-          is0Arg = true;
-          message = inputMessage.substring(prefixMatcher.end());
-          
-        } else if (cmd1ArgMatcher.find() && command.length() == cmd1ArgMatcher.group().length()) {
-          is1Arg = true;
-          Matcher arg1Matcher = Pattern.compile(" .+? ").matcher(inputMessage);
-          
-          if (arg1Matcher.find()) {
-            arg1 = inputMessage.substring(arg1Matcher.start(), arg1Matcher.end()).trim();
-            message = inputMessage.substring(arg1Matcher.end());
-          } else {
-            isIgnore = true;
-            message = inputMessage;
-          }
-          
-        } else {
-          message = inputMessage;
-          // Completely ignore all unknown commands
-          isIgnore = true;
-        }
-      } else {
-        message = inputMessage;
-      }
-      
-      if (!isIgnore) {
-        String messageOut = prettify(message);
-        
-        if (is0Arg) {
-          messageOut = prefix + command + " " + messageOut;
-        } else if (is1Arg) {
-          messageOut = prefix + command + " " + arg1 + " " + messageOut;
-        }
-        
-        if (getNetworkManager() != null) {
-          CPacketChatMessage packet = new CPacketChatMessage(messageOut);
-          PacketHelper.ignore(packet);
-          getNetworkManager().sendPacket(packet);
-          event.setCanceled(true);
-        }
-      }
-    }
-  }
-  
-  private String makeLeet(String message) {
-    char[] messageArray;
-    
-    message = message.replaceAll("(?i)dude", "d00d").replaceAll("(^|\\s)ph", "$1f");
-    
-    messageArray = message.toCharArray();
-    // match and replace the last only S in a word
-    Matcher zMatcher = Pattern.compile("(?<![sS])([sS])(?:[^\\w]|$)").matcher(message);
-    
-    while (!zMatcher.hitEnd()) {
-      if (zMatcher.find()) {
-        if (zMatcher.group(1).equals("s")) {
-          messageArray[zMatcher.end(1) - 1] = 'z';
-        } else {
-          messageArray[zMatcher.end(1) - 1] = 'Z';
-        }
-      }
-    }
-    
-    StringBuilder builder = new StringBuilder();
-    Random random = new Random();
-    for (char c : messageArray) {
-      int key = Character.toUpperCase(c);
-      // half the probability for LEET
-      if (random.nextInt(2) == 0
-          && LeetMap.get(key) != null
-          && (LeetProbability.get(key) == null
-          || LeetProbability.get(key) > random.nextInt(100))) {
-        builder.append(LeetMap.get(key));
-      } else {
-        builder.append(c);
-      }
-    }
-    
-    return builder.toString();
-  }
-  
-  private String makeWave(String message) {
-    char[] messageArray = message.toCharArray();
-    ThreadLocalRandom rand = ThreadLocalRandom.current();
-    double span = rand.nextDouble(0.4D, 1.3D);
-    double xoff = rand.nextDouble(0, 32);
-    double yoff = rand.nextDouble(-0.4, 0.6);
-    
-    for (int i = 0; i < messageArray.length; i++) {
-      if (waveCharIsUpper(i, span, xoff, yoff)) {
-        messageArray[i] = Character.toUpperCase(messageArray[i]);
-      }
-    }
-    return new String(messageArray);
-  }
-  
-  private String randomCase(String message) {
-    char[] messageArray = message.toCharArray();
-    ThreadLocalRandom rand = ThreadLocalRandom.current();
-    
-    for (int i = 0; i < messageArray.length; i++) {
-      if (rand.nextBoolean()) {
-        messageArray[i] = Character.toUpperCase(messageArray[i]);
-      } else {
-        messageArray[i] = Character.toLowerCase(messageArray[i]);
-      }
-    }
-    return new String(messageArray);
-  }
-  
-  private boolean waveCharIsUpper(double x, double span, double xoff, double yoff) {
-    // defaults: span = 0.4, xoff=0, yoff=-0.5
-    return Math.sin(x * span + xoff) + yoff > 0;
-  }
-  
-  private String changeAlphabet(String message, MODE fontType) {
-    char[] messageArray = message.toCharArray();
-    int[] currentFont = FONT[fontType.ordinal()];
-    int i = 0;
-    
-    for (char c : messageArray) {
-      int letterKey = alphabet.indexOf(c);
-      if (letterKey != -1 && (c != (char) 0x3E)) {
-        messageArray[i] = (char) currentFont[letterKey];
-      }
-      i++;
-    }
-    return new String(messageArray);
-  }
-  
-  public String prettify(String message) {
-    switch (font.get()) {
-      case LEET:
-        return makeLeet(message);
-      case WAVE:
-        return makeWave(message);
-      case RANDOMCASE:
-        return randomCase(message);
-      default:
-        return changeAlphabet(message, font.get());
-    }
-  }
+
+
+
+
+
+
+
+
 }

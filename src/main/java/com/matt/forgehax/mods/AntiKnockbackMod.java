@@ -1,13 +1,6 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getLocalPlayer;
-import static com.matt.forgehax.Helper.getWorld;
-
-import com.matt.forgehax.asm.events.ApplyCollisionMotionEvent;
-import com.matt.forgehax.asm.events.EntityBlockSlipApplyEvent;
-import com.matt.forgehax.asm.events.PacketEvent;
-import com.matt.forgehax.asm.events.PushOutOfBlocksEvent;
-import com.matt.forgehax.asm.events.WaterMovementEvent;
+import com.matt.forgehax.asm.events.*;
 import com.matt.forgehax.asm.reflection.FastReflection;
 import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.math.VectorUtils;
@@ -23,9 +16,12 @@ import net.minecraft.network.play.server.SPacketExplosion;
 import net.minecraft.util.math.Vec3d;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
+import static com.matt.forgehax.Helper.getLocalPlayer;
+import static com.matt.forgehax.Helper.getWorld;
+
 @RegisterMod
 public class AntiKnockbackMod extends ToggleMod {
-  
+
   private final Setting<Double> multiplier_x =
       getCommandStub()
           .builders()
@@ -34,7 +30,7 @@ public class AntiKnockbackMod extends ToggleMod {
           .description("Multiplier for X axis")
           .defaultTo(0.D)
           .build();
-  
+
   private final Setting<Double> multiplier_y =
       getCommandStub()
           .builders()
@@ -43,7 +39,7 @@ public class AntiKnockbackMod extends ToggleMod {
           .description("Multiplier for Y axis")
           .defaultTo(0.D)
           .build();
-  
+
   private final Setting<Double> multiplier_z =
       getCommandStub()
           .builders()
@@ -52,7 +48,7 @@ public class AntiKnockbackMod extends ToggleMod {
           .description("Multiplier for Z axis")
           .defaultTo(0.D)
           .build();
-  
+
   private final Setting<Boolean> explosions =
       getCommandStub()
           .builders()
@@ -61,7 +57,7 @@ public class AntiKnockbackMod extends ToggleMod {
           .description("Disable velocity from SPacketExplosion")
           .defaultTo(true)
           .build();
-  
+
   private final Setting<Boolean> velocity =
       getCommandStub()
           .builders()
@@ -70,7 +66,7 @@ public class AntiKnockbackMod extends ToggleMod {
           .description("Disable velocity from SPacketEntityVelocity")
           .defaultTo(true)
           .build();
-  
+
   private final Setting<Boolean> fishhook =
       getCommandStub()
           .builders()
@@ -79,7 +75,7 @@ public class AntiKnockbackMod extends ToggleMod {
           .description("Disable velocity from a fishhook")
           .defaultTo(true)
           .build();
-  
+
   private final Setting<Boolean> water =
       getCommandStub()
           .builders()
@@ -88,7 +84,7 @@ public class AntiKnockbackMod extends ToggleMod {
           .description("Disable velocity from flowing water")
           .defaultTo(true)
           .build();
-  
+
   private final Setting<Boolean> push =
       getCommandStub()
           .builders()
@@ -97,7 +93,7 @@ public class AntiKnockbackMod extends ToggleMod {
           .description("Disable velocity from entity pushing")
           .defaultTo(true)
           .build();
-  
+
   private final Setting<Boolean> blocks =
       getCommandStub()
           .builders()
@@ -106,7 +102,7 @@ public class AntiKnockbackMod extends ToggleMod {
           .description("Disable velocity from block pushing")
           .defaultTo(true)
           .build();
-  
+
   private final Setting<Boolean> slipping =
       getCommandStub()
           .builders()
@@ -115,31 +111,33 @@ public class AntiKnockbackMod extends ToggleMod {
           .description("Disable velocity from ice slipping")
           .defaultTo(true)
           .build();
-  
+
   public AntiKnockbackMod() {
     super(Category.COMBAT, "AntiKnockback", false, "Removes knockback movement");
   }
-  
+
   private Vec3d getMultiplier() {
     return new Vec3d(multiplier_x.get(), multiplier_y.get(), multiplier_z.get());
   }
-  
+
   private Vec3d getPacketMotion(Packet<?> packet) {
     if (packet instanceof SPacketExplosion) {
       return new Vec3d(
           FastReflection.Fields.SPacketExplosion_motionX.get(packet),
           FastReflection.Fields.SPacketExplosion_motionY.get(packet),
-          FastReflection.Fields.SPacketExplosion_motionZ.get(packet));
+          FastReflection.Fields.SPacketExplosion_motionZ.get(packet)
+      );
     } else if (packet instanceof SPacketEntityVelocity) {
       return new Vec3d(
           FastReflection.Fields.SPacketEntityVelocity_motionX.get(packet),
           FastReflection.Fields.SPacketEntityVelocity_motionY.get(packet),
-          FastReflection.Fields.SPacketEntityVelocity_motionZ.get(packet));
+          FastReflection.Fields.SPacketEntityVelocity_motionZ.get(packet)
+      );
     } else {
       throw new IllegalArgumentException();
     }
   }
-  
+
   private void setPacketMotion(Packet<?> packet, Vec3d in) {
     if (packet instanceof SPacketExplosion) {
       FastReflection.Fields.SPacketExplosion_motionX.set(packet, (float) in.x);
@@ -153,20 +151,19 @@ public class AntiKnockbackMod extends ToggleMod {
       throw new IllegalArgumentException();
     }
   }
-  
+
   private void addEntityVelocity(Entity in, Vec3d velocity) {
     in.motionX += velocity.x;
     in.motionY += velocity.y;
     in.motionZ += velocity.z;
   }
-  
+
   /**
    * Stops TNT and knockback velocity
    */
   @SubscribeEvent
   public void onPacketRecieved(PacketEvent.Incoming.Pre event) {
     if (getLocalPlayer() == null || getWorld() == null) {
-      return;
     } else if (explosions.get() && event.getPacket() instanceof SPacketExplosion) {
       Vec3d multiplier = getMultiplier();
       Vec3d motion = getPacketMotion(event.getPacket());
@@ -178,7 +175,8 @@ public class AntiKnockbackMod extends ToggleMod {
         if (multiplier.lengthSquared() > 0.D) {
           setPacketMotion(
               event.getPacket(),
-              VectorUtils.multiplyBy(getPacketMotion(event.getPacket()), multiplier));
+              VectorUtils.multiplyBy(getPacketMotion(event.getPacket()), multiplier)
+          );
         } else {
           event.setCanceled(true);
         }
@@ -203,7 +201,7 @@ public class AntiKnockbackMod extends ToggleMod {
       }
     }
   }
-  
+
   /**
    * Stops velocity from water
    */
@@ -212,11 +210,12 @@ public class AntiKnockbackMod extends ToggleMod {
     if (water.get() && getLocalPlayer() != null && getLocalPlayer().equals(event.getEntity())) {
       addEntityVelocity(
           event.getEntity(),
-          VectorUtils.multiplyBy(event.getMoveDir().normalize().scale(0.014D), getMultiplier()));
+          VectorUtils.multiplyBy(event.getMoveDir().normalize().scale(0.014D), getMultiplier())
+      );
       event.setCanceled(true);
     }
   }
-  
+
   /**
    * Stops velocity from collision
    */
@@ -227,18 +226,20 @@ public class AntiKnockbackMod extends ToggleMod {
           event.getEntity(),
           VectorUtils.multiplyBy(
               new Vec3d(event.getMotionX(), event.getMotionY(), event.getMotionZ()),
-              getMultiplier()));
+              getMultiplier()
+          )
+      );
       event.setCanceled(true);
     }
   }
-  
+
   @SubscribeEvent
   public void onPushOutOfBlocks(PushOutOfBlocksEvent event) {
     if (blocks.get()) {
       event.setCanceled(true);
     }
   }
-  
+
   @SubscribeEvent
   public void onBlockSlip(EntityBlockSlipApplyEvent event) {
     if (slipping.get()

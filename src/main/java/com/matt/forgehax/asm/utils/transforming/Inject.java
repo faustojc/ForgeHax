@@ -11,8 +11,8 @@ import java.lang.annotation.Target;
 @Target(ElementType.METHOD)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Inject {
-  
+
   String description() default "empty";
-  
+
   InjectPriority priority() default InjectPriority.DEFAULT;
 }

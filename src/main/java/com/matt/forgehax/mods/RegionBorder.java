@@ -18,19 +18,20 @@ public class RegionBorder extends ToggleMod {
 
 
   private final Setting<Integer> chunkDistance =
-    getCommandStub()
-      .builders()
-      .<Integer>newSettingBuilder()
-      .name("chunk-distance")
-      .description("how many chunks in front of the region the border should be drawn. I you don't want it just set it to 0 so it is like the normal region border.")
-      .defaultTo(5)
-      .build();
+      getCommandStub()
+          .builders()
+          .<Integer>newSettingBuilder()
+          .name("chunk-distance")
+          .description("how many chunks in front of the region the border should be drawn. I you don't want it just set it to 0 so it is like the normal " +
+              "region border.")
+          .defaultTo(5)
+          .build();
 
   private final Setting<Boolean> drawRegionBorder = getCommandStub().builders().<Boolean>newSettingBuilder()
-    .name("draw-region-border")
-    .description("whether you even want to draw the actual region border.")
-    .defaultTo(true)
-    .build();
+                                                                    .name("draw-region-border")
+                                                                    .description("whether you even want to draw the actual region border.")
+                                                                    .defaultTo(true)
+                                                                    .build();
 
 
   public RegionBorder() {
@@ -39,6 +40,7 @@ public class RegionBorder extends ToggleMod {
 
   /**
    * to draw the border
+   *
    * @param event
    */
   @SubscribeEvent
@@ -49,7 +51,7 @@ public class RegionBorder extends ToggleMod {
     BlockPos to = from.add(511, 256, 511);
 
     int color = Colors.ORANGE.toBuffer();
-    if(drawRegionBorder.getAsBoolean()) {
+    if (drawRegionBorder.getAsBoolean()) {
       GeometryTessellator.drawCuboid(event.getBuffer(), from, to, GeometryMasks.Line.ALL, color);
     }
 

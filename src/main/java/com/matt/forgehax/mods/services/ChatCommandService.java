@@ -17,13 +17,8 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
  */
 @RegisterMod
 public class ChatCommandService extends ServiceMod {
-  
+
   private static Character ACTIVATION_CHARACTER = '.';
-  
-  public static Character getActivationCharacter() {
-    return ACTIVATION_CHARACTER;
-  }
-  
   public final Setting<Character> activationCharacter =
       getCommandStub()
           .builders()
@@ -33,30 +28,15 @@ public class ChatCommandService extends ServiceMod {
           .defaultTo('.')
           .changed(cb -> ACTIVATION_CHARACTER = cb.getTo())
           .build();
-  
+
   public ChatCommandService() {
     super("ChatCommandService", "Listeners for activation key in chat messages typed");
   }
-  
-  @Override
-  protected void onLoad() {
-    ACTIVATION_CHARACTER = activationCharacter.get();
+
+  public static Character getActivationCharacter() {
+    return ACTIVATION_CHARACTER;
   }
-  
-  @SubscribeEvent
-  public void onSendPacket(PacketEvent.Outgoing.Pre event) {
-    if (event.getPacket() instanceof CPacketChatMessage) {
-      String message = ((CPacketChatMessage) event.getPacket()).getMessage();
-      if (!PacketHelper.isIgnored(event.getPacket())
-          && message.startsWith(activationCharacter.getAsString()) && message.length() > 1) {
-        // cut out the . from the message
-        String line = message.substring(1);
-        handleCommand(line);
-        event.setCanceled(true);
-      }
-    }
-  }
-  
+
   // to be called from MainMenuGuiService
   public static void handleCommand(String message) {
     ConsoleIO.start();
@@ -72,5 +52,24 @@ public class ChatCommandService extends ServiceMod {
       Helper.printMessage(t.getMessage());
     }
     ConsoleIO.finished();
+  }
+
+  @Override
+  protected void onLoad() {
+    ACTIVATION_CHARACTER = activationCharacter.get();
+  }
+
+  @SubscribeEvent
+  public void onSendPacket(PacketEvent.Outgoing.Pre event) {
+    if (event.getPacket() instanceof CPacketChatMessage) {
+      String message = ((CPacketChatMessage) event.getPacket()).getMessage();
+      if (!PacketHelper.isIgnored(event.getPacket())
+          && message.startsWith(activationCharacter.getAsString()) && message.length() > 1) {
+        // cut out the . from the message
+        String line = message.substring(1);
+        handleCommand(line);
+        event.setCanceled(true);
+      }
+    }
   }
 }

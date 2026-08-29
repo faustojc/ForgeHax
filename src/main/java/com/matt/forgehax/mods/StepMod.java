@@ -1,9 +1,5 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getLocalPlayer;
-import static com.matt.forgehax.Helper.getNetworkManager;
-import static com.matt.forgehax.Helper.getRidingEntity;
-
 import com.google.common.collect.Lists;
 import com.matt.forgehax.asm.events.PacketEvent;
 import com.matt.forgehax.events.LocalPlayerUpdateEvent;
@@ -12,19 +8,22 @@ import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.network.Packet;
 import net.minecraft.network.play.client.CPacketPlayer;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static com.matt.forgehax.Helper.*;
+
 @RegisterMod
 public class StepMod extends ToggleMod {
-  
+
   private static final float DEFAULT_STEP_HEIGHT = 0.6f;
-  
+
   private final Setting<Boolean> entityStep =
       getCommandStub()
           .builders()
@@ -33,8 +32,15 @@ public class StepMod extends ToggleMod {
           .description("entitystep")
           .defaultTo(false)
           .build();
-  
-  private final Setting<Float> stepHeight =
+  private final Setting<Boolean> unstep =
+      getCommandStub()
+          .builders()
+          .<Boolean>newSettingBuilder()
+          .name("unstep")
+          .description("step down instead of falling")
+          .defaultTo(false)
+          .build();
+  private boolean wasOnGround = false;  private final Setting<Float> stepHeight =
       getCommandStub()
           .builders()
           .<Float>newSettingBuilder()
@@ -51,60 +57,29 @@ public class StepMod extends ToggleMod {
             }
           }))
           .build();
-  
-  private final Setting<Boolean> unstep =
-      getCommandStub()
-          .builders()
-          .<Boolean>newSettingBuilder()
-          .name("unstep")
-          .description("step down instead of falling")
-          .defaultTo(false)
-          .build();
-  
+  private CPacketPlayer previousPositionPacket = null;
   public StepMod() {
     super(Category.PLAYER, "Step", false, "Step up blocks");
   }
-  
-  @Override
-  protected void onEnabled() {
-    EntityPlayer player = getLocalPlayer();
-    if (player != null) {
-      wasOnGround = player.onGround;
-    }
-  }
-  
-  @Override
-  public void onDisabled() {
-    EntityPlayer player = getLocalPlayer();
-    if (player != null) {
-      player.stepHeight = DEFAULT_STEP_HEIGHT;
-    }
-    
-    if (getRidingEntity() != null) {
-      getRidingEntity().stepHeight = 1;
-    }
-  }
-  
+
   private void updateStepHeight(EntityPlayer player) {
     player.stepHeight = player.onGround ? stepHeight.get() : DEFAULT_STEP_HEIGHT;
   }
-  
-  private boolean wasOnGround = false;
-  
+
   private void unstep(EntityPlayer player) {
     AxisAlignedBB range = player.getEntityBoundingBox().expand(0, -stepHeight.get(), 0)
-        .contract(0, player.height, 0);
-    
+                                .contract(0, player.height, 0);
+
     if (!player.world.collidesWithAnyBlock(range)) {
       return;
     }
-    
+
     List<AxisAlignedBB> collisionBoxes = player.world.getCollisionBoxes(player, range);
     AtomicReference<Double> newY = new AtomicReference<>(0D);
     collisionBoxes.forEach(box -> newY.set(Math.max(newY.get(), box.maxY)));
     player.setPositionAndUpdate(player.posX, newY.get(), player.posZ);
   }
-  
+
   private void updateUnstep(EntityPlayer player) {
     try {
       if (unstep.get() && wasOnGround && !player.onGround && player.motionY <= 0) {
@@ -114,17 +89,17 @@ public class StepMod extends ToggleMod {
       wasOnGround = player.onGround;
     }
   }
-  
+
   @SubscribeEvent
   public void onLocalPlayerUpdate(LocalPlayerUpdateEvent event) {
     EntityPlayer player = (EntityPlayer) event.getEntityLiving();
     if (player == null) {
       return;
     }
-    
+
     updateStepHeight(player);
     updateUnstep(player);
-    
+
     if (getRidingEntity() != null) {
       if (entityStep.getAsBoolean()) {
         getRidingEntity().stepHeight = 256;
@@ -133,9 +108,7 @@ public class StepMod extends ToggleMod {
       }
     }
   }
-  
-  private CPacketPlayer previousPositionPacket = null;
-  
+
   @SubscribeEvent
   public void onPacketSending(PacketEvent.Outgoing.Pre event) {
     if (event.getPacket() instanceof CPacketPlayer.Position
@@ -159,7 +132,8 @@ public class StepMod extends ToggleMod {
                   packetPlayer.getX(0.f),
                   packetPlayer.getY(0.f),
                   packetPlayer.getZ(0.f),
-                  packetPlayer.isOnGround()));
+                  packetPlayer.isOnGround()
+              ));
           for (Packet toSend : sendList) {
             PacketHelper.ignore(toSend);
             getNetworkManager().sendPacket(toSend);
@@ -170,7 +144,27 @@ public class StepMod extends ToggleMod {
       previousPositionPacket = event.getPacket();
     }
   }
-  
+
+  @Override
+  protected void onEnabled() {
+    EntityPlayer player = getLocalPlayer();
+    if (player != null) {
+      wasOnGround = player.onGround;
+    }
+  }
+
+  @Override
+  public void onDisabled() {
+    EntityPlayer player = getLocalPlayer();
+    if (player != null) {
+      player.stepHeight = DEFAULT_STEP_HEIGHT;
+    }
+
+    if (getRidingEntity() != null) {
+      getRidingEntity().stepHeight = 1;
+    }
+  }
+
   @Override
   public String getDebugDisplayText() {
     return String.format(
@@ -180,4 +174,8 @@ public class StepMod extends ToggleMod {
         unstep.get() ? "+unstep" : ""
     );
   }
+
+
+
+
 }

@@ -1,12 +1,7 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getLocalPlayer;
-import static com.matt.forgehax.Helper.getPlayerController;
-import static com.matt.forgehax.Helper.getWorld;
-
 import com.matt.forgehax.mods.managers.PositionRotationManager;
 import com.matt.forgehax.mods.managers.PositionRotationManager.RotationState;
-import com.matt.forgehax.mods.services.TickRateService;
 import com.matt.forgehax.util.Utils;
 import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.common.PriorityEnum;
@@ -18,152 +13,99 @@ import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
 import com.matt.forgehax.util.projectile.Projectile;
-import java.util.Comparator;
-import java.util.Optional;
+import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.util.EnumHand;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.World;
 
+import javax.annotation.Nullable;
+import java.util.Comparator;
+import java.util.Objects;
+
+import static com.matt.forgehax.Helper.*;
+
+/**
+ * Aim assist only. It never attacks on its own, it corrects where the swing or the shot the player
+ * is already making goes. KillAura is the mod that attacks by itself.
+ */
 @RegisterMod
 public class Aimbot extends ToggleMod implements PositionRotationManager.MovementUpdateListener {
-  
+
+  /**
+   * Weight of the newest tick in the smoothed target velocity, ~1.5 tick time constant
+   */
+  private static final double VELOCITY_SMOOTHING = 0.45D;
+  /**
+   * Aim point and flight time depend on each other, this is how many times we bounce between them
+   */
+  private static final int PREDICTION_ITERATIONS = 4;
+  /**
+   * Flight time is settled once it stops moving by more than a quarter tick
+   */
+  private static final double PREDICTION_TOLERANCE = 0.25D;
+  /**
+   * ponytail: nothing here tracks where the ground is, so an airborne target is only followed for
+   * about the length of a jump before its height is held flat. Track the last onGround y if
+   * leading targets falling down long drops ever matters.
+   */
+  private static final int PREDICTION_FALL_TICKS = 20;
+
   private static Entity target = null;
-  
-  public static void setTarget(Entity target) {
-    Aimbot.target = target;
-  }
-  
-  public static Entity getTarget() {
-    return target;
-  }
-  
-  enum Selector {
-    CROSSHAIR,
-    DISTANCE,
-  }
-  
+
+  private Entity velocityTarget = null;
+  private Vec3d smoothedVelocity = Vec3d.ZERO;
   private final Setting<Boolean> silent =
       getCommandStub()
           .builders()
           .<Boolean>newSettingBuilder()
           .name("silent")
-          .description("Wont look at target when aiming")
+          .description("Only send the rotation to the server, don't move the camera")
           .defaultTo(true)
           .build();
-  
-  private final Setting<Boolean> auto_attack =
-      getCommandStub()
-          .builders()
-          .<Boolean>newSettingBuilder()
-          .name("auto-attack")
-          .description("Automatically attack when target found")
-          .defaultTo(true)
-          .build();
-  
-  private final Setting<Boolean> hold_target =
+  private final Setting<Boolean> holdTarget =
       getCommandStub()
           .builders()
           .<Boolean>newSettingBuilder()
           .name("hold-target")
-          .description("Keep first caught target until it becomes no longer valid")
+          .description("Keep the first target until it becomes invalid")
           .defaultTo(false)
           .build();
-  
-  private final Setting<Boolean> vis_check =
+  private final Setting<Boolean> visCheck =
       getCommandStub()
           .builders()
           .<Boolean>newSettingBuilder()
           .name("trace")
-          .description("Check if the target is visible before acquiring")
+          .description("Only aim at targets that are visible")
           .defaultTo(false)
           .build();
-  
-  private final Setting<Boolean> target_players =
-      getCommandStub()
-          .builders()
-          .<Boolean>newSettingBuilder()
-          .name("target-players")
-          .description("Target players")
-          .defaultTo(true)
-          .build();
-  
-  private final Setting<Boolean> target_mobs_hostile =
-      getCommandStub()
-          .builders()
-          .<Boolean>newSettingBuilder()
-          .name("target-hostile-mobs")
-          .description("Target hostile mobs")
-          .defaultTo(true)
-          .build();
-  
-  private final Setting<Boolean> target_mobs_friendly =
-      getCommandStub()
-          .builders()
-          .<Boolean>newSettingBuilder()
-          .name("target-friendly-mobs")
-          .description("Target friendly mobs")
-          .defaultTo(false)
-          .build();
-  
-  private final Setting<Boolean> lag_compensation =
-      getCommandStub()
-          .builders()
-          .<Boolean>newSettingBuilder()
-          .name("lag-compensation")
-          .description("Compensate for server lag")
-          .defaultTo(true)
-          .build();
-  
   private final Setting<Integer> fov =
       getCommandStub()
           .builders()
           .<Integer>newSettingBuilder()
           .name("fov")
-          .description("Aimbot field of view")
+          .description("Field of view a target must be within")
           .defaultTo(180)
           .min(0)
           .max(180)
           .build();
-  
   private final Setting<Double> range =
       getCommandStub()
           .builders()
           .<Double>newSettingBuilder()
           .name("range")
-          .description("Aimbot range")
+          .description("Melee aim range")
           .defaultTo(4.5D)
           .build();
-  
-  private final Setting<Float> cooldown_percent =
-      getCommandStub()
-          .builders()
-          .<Float>newSettingBuilder()
-          .name("cooldown_percent")
-          .description("Minimum cooldown percent for next strike")
-          .defaultTo(100F)
-          .min(0F)
-          .build();
-  
-  private final Setting<Boolean> projectile_aimbot =
+  private final Setting<Boolean> projectileAimbot =
       getCommandStub()
           .builders()
           .<Boolean>newSettingBuilder()
           .name("proj-aimbot")
-          .description("Projectile aimbot")
+          .description("Aim projectile weapons while they are being used")
           .defaultTo(true)
           .build();
-  
-  private final Setting<Boolean> projectile_auto_attack =
-      getCommandStub()
-          .builders()
-          .<Boolean>newSettingBuilder()
-          .name("proj-auto-attack")
-          .description("Automatically attack when target found for projectile weapons")
-          .defaultTo(true)
-          .build();
-  
-  private final Setting<Boolean> projectile_trace_check =
+  private final Setting<Boolean> projectileTraceCheck =
       getCommandStub()
           .builders()
           .<Boolean>newSettingBuilder()
@@ -171,16 +113,32 @@ public class Aimbot extends ToggleMod implements PositionRotationManager.Movemen
           .description("Check the trace of each target if holding a weapon that fires a projectile")
           .defaultTo(true)
           .build();
-  
-  private final Setting<Double> projectile_range =
+  private final Setting<Double> projectileRange =
       getCommandStub()
           .builders()
           .<Double>newSettingBuilder()
           .name("projectile-range")
-          .description("Projectile aimbot range")
+          .description("Projectile aim range")
           .defaultTo(100D)
           .build();
-  
+  private final Setting<Boolean> projectilePredict =
+      getCommandStub()
+          .builders()
+          .<Boolean>newSettingBuilder()
+          .name("proj-predict")
+          .description("Lead the shot to where the target will be when the projectile arrives")
+          .defaultTo(true)
+          .build();
+  private final Setting<Double> projectileLead =
+      getCommandStub()
+          .builders()
+          .<Double>newSettingBuilder()
+          .name("proj-lead")
+          .description("How much of the predicted lead to apply, lower it against jittery targets")
+          .defaultTo(1.D)
+          .min(0.D)
+          .max(1.D)
+          .build();
   private final Setting<Selector> selector =
       getCommandStub()
           .builders()
@@ -189,165 +147,288 @@ public class Aimbot extends ToggleMod implements PositionRotationManager.Movemen
           .description("The method used to select a target from a group")
           .defaultTo(Selector.CROSSHAIR)
           .build();
-  
+
   public Aimbot() {
-    super(Category.COMBAT, "Aimbot", false, "Automatically attack entities and players");
+    super(Category.COMBAT, "Aimbot", false, "Aim at what you are attacking or shooting at");
   }
-  
-  private double getLagComp() {
-    if (lag_compensation.get()) {
-      return -(20.D - TickRateService.getTickData().getPoint().getAverage());
+
+  @Nullable
+  public static Entity getTarget() {
+    return target;
+  }
+
+  /**
+   * Below KillAura on purpose. Both aim at the same shared target, but only the first listener to
+   * move the view gets its follow up tasks run, and KillAura's is the swing.
+   */
+  @Override
+  protected void onEnabled() {
+    PositionRotationManager.getManager().register(this, PriorityEnum.HIGH);
+  }
+
+  @Override
+  public void onDisabled() {
+    PositionRotationManager.getManager().unregister(this);
+    forgetTarget();
+  }
+
+  @Override
+  public void onLocalPlayerMovementUpdate(RotationState.Local state) {
+    final EntityPlayerSP player = getLocalPlayer();
+    final World world = getWorld();
+
+    if (player == null || world == null || player.isSpectator() || !player.isEntityAlive()) {
+      forgetTarget();
+      return;
+    }
+
+    final Projectile projectile = getHeldProjectile();
+    final boolean useProjectile = projectileAimbot.get() && !projectile.isNull();
+
+    if (!isAttacking(player, useProjectile)) {
+      forgetTarget();
+      return;
+    }
+
+    final Vec3d eyes = EntityUtils.getEyePos(player);
+    final Vec3d look = player.getLookVec().normalize();
+    final Angle angles = AngleHelper.getAngleFacingInDegrees(look);
+
+    Entity found = target;
+    if (!holdTarget.get() || found == null || !filterTarget(eyes, look, angles, found)) {
+      found = findTarget(world, eyes, look, angles);
+    }
+    target = found;
+
+    if (found == null) {
+      return;
+    }
+
+    if (useProjectile) {
+      aimProjectile(state, player, projectile, found);
     } else {
-      return 0.D;
+      state.setViewAngles(Utils.getLookAtAngles(found).normalize(), silent.get());
     }
   }
-  
-  private boolean canAttack(EntityPlayer localPlayer, Entity target) {
-    final float cdRatio = cooldown_percent.get() / 100F;
-    final float cdOffset = cdRatio <= 1F ? 0F : -(localPlayer.getCooldownPeriod() * (cdRatio - 1F));
-    return localPlayer.getCooledAttackStrength((float) getLagComp() + cdOffset)
-        >= (Math.min(1F, cdRatio))
-        && (auto_attack.get() || Bindings.attack.getBinding().isKeyDown()); // need to work on this
+
+  /**
+   * The whole point of the mod: it aims, it never swings. Melee follows the attack key, projectiles
+   * follow the item actually being drawn or thrown.
+   */
+  private boolean isAttacking(EntityPlayerSP player, boolean useProjectile) {
+    return useProjectile
+        ? player.isHandActive() || Bindings.use.getBinding().isKeyDown()
+        : Bindings.attack.getBinding().isKeyDown();
   }
-  
+
+  private void forgetTarget() {
+    target = null;
+    velocityTarget = null;
+    smoothedVelocity = Vec3d.ZERO;
+  }
+
   private Projectile getHeldProjectile() {
     return Projectile.getProjectileByItemStack(getLocalPlayer().getHeldItem(EnumHand.MAIN_HAND));
   }
-  
-  private boolean isHoldingProjectileItem() {
-    return !getHeldProjectile().isNull();
+
+  /**
+   * How far the item has been drawn right now. A bow's arc depends on it, so it has to come from the
+   * player rather than a setting now that the player is the one releasing the shot. Throwables
+   * ignore the charge entirely.
+   */
+  private int getCharge(EntityPlayerSP player) {
+    return player.isHandActive() ? Math.max(1, player.getItemInUseMaxCount()) : 1;
   }
-  
-  private boolean isProjectileAimbotActivated() {
-    return projectile_aimbot.get() && isHoldingProjectileItem();
-  }
-  
-  private boolean isVisible(Entity target) {
-    if (isProjectileAimbotActivated() && projectile_trace_check.get()) {
-      return getHeldProjectile().canHitEntity(EntityUtils.getEyePos(getLocalPlayer()), target);
+
+  private boolean isVisible(Entity entity, boolean useProjectile) {
+    if (useProjectile && projectileTraceCheck.get()) {
+      // no lead here, this runs over every candidate entity and only decides whether the target is
+      // worth acquiring at all
+      final EntityPlayerSP player = getLocalPlayer();
+      Projectile projectile = getHeldProjectile();
+      Vec3d shootPos = Projectile.getEntityShootPos(player);
+      Vec3d inherited = getInheritedMotion();
+      double force = projectile.getForce(getCharge(player));
+
+      Projectile.LaunchSolution solution =
+          projectile.solveLaunch(shootPos, getAttackPosition(entity), force, inherited);
+      return solution != null
+          && projectile.isPathClear(shootPos, solution, force, inherited, entity);
     } else {
-      return !vis_check.get() || getLocalPlayer().canEntityBeSeen(target);
+      return !visCheck.get() || getLocalPlayer().canEntityBeSeen(entity);
     }
   }
-  
+
+  /**
+   * Velocity the projectile picks up from the player, see EntityArrow#shoot(Entity, ...). It is
+   * added on top of the aimed velocity, so the aim has to be bent to cancel it out.
+   */
+  private Vec3d getInheritedMotion() {
+    EntityPlayerSP player = getLocalPlayer();
+    return new Vec3d(player.motionX, player.onGround ? 0.D : player.motionY, player.motionZ);
+  }
+
   private Vec3d getAttackPosition(Entity entity) {
     return EntityUtils.getInterpolatedPos(entity, 1).addVector(0, entity.getEyeHeight() / 2, 0);
   }
-  
+
   /**
-   * Check if the entity is a valid target to acquire
+   * Which entities may be targeted is shared with KillAura through the Targets module, only the
+   * geometry is the aimbot's own.
    */
-  private boolean filterTarget(Vec3d pos, Vec3d viewNormal, Angle angles, Entity entity) {
-    final Vec3d tpos = getAttackPosition(entity);
-    return Optional.of(entity)
-        .filter(EntityUtils::isLiving)
-        .filter(EntityUtils::isAlive)
-        .filter(EntityUtils::isValidEntity)
-        .filter(ent -> !ent.equals(getLocalPlayer()))
-        .filter(this::isFiltered)
-        .filter(ent -> isInRange(tpos, pos))
-        .filter(ent -> isInFov(angles, tpos.subtract(pos)))
-        .filter(this::isVisible)
-        .isPresent();
+  private boolean filterTarget(Vec3d eyes, Vec3d viewNormal, Angle angles, Entity entity) {
+    final boolean useProjectile = projectileAimbot.get() && !getHeldProjectile().isNull();
+    return Targets.isValidTarget(entity)
+        && isInRange(eyes, entity, useProjectile)
+        && isInFov(angles, getAttackPosition(entity).subtract(eyes))
+        && isVisible(entity, useProjectile);
   }
-  
-  private boolean isFiltered(Entity entity) {
-    switch (EntityUtils.getRelationship(entity)) {
-      case PLAYER:
-        return target_players.get();
-      case FRIENDLY:
-      case NEUTRAL:
-        return target_mobs_friendly.get();
-      case HOSTILE:
-        return target_mobs_hostile.get();
-      case INVALID:
-      default:
-        return false;
-    }
-  }
-  
-  private boolean isInRange(Vec3d from, Vec3d to) {
-    double dist = isProjectileAimbotActivated() ? projectile_range.get() : range.get();
-    return dist <= 0 || from.distanceTo(to) <= dist;
-  }
-  
-  private boolean isInFov(Angle angle, Vec3d pos) {
-    double fov = this.fov.get();
-    if (fov >= 180) {
+
+  private boolean isInRange(Vec3d eyes, Entity entity, boolean useProjectile) {
+    double dist = useProjectile ? projectileRange.get() : range.get();
+    if (dist <= 0.D) {
       return true;
-    } else {
-      Angle look = AngleHelper.getAngleFacingInDegrees(pos);
-      Angle diff = angle.sub(look.getPitch(), look.getYaw()).normalize();
-      return Math.abs(diff.getPitch()) <= fov && Math.abs(diff.getYaw()) <= fov;
     }
+    return EntityUtils.getDistanceSq(eyes, entity.getEntityBoundingBox()) <= dist * dist;
   }
-  
-  private double selecting(
-      final Vec3d pos, final Vec3d viewNormal, final Angle angles, final Entity entity) {
+
+  private boolean isInFov(Angle angle, Vec3d pos) {
+    double max = this.fov.get();
+    if (max >= 180) {
+      return true;
+    }
+    Angle look = AngleHelper.getAngleFacingInDegrees(pos);
+    Angle diff = angle.sub(look.getPitch(), look.getYaw()).normalize();
+    return Math.abs(diff.getPitch()) <= max && Math.abs(diff.getYaw()) <= max;
+  }
+
+  private double selecting(final Vec3d eyes, final Vec3d viewNormal, final Entity entity) {
     switch (selector.get()) {
       case DISTANCE:
-        return getAttackPosition(entity).subtract(pos).lengthSquared();
+        return getAttackPosition(entity).subtract(eyes).lengthSquared();
       case CROSSHAIR:
       default:
         return getAttackPosition(entity)
-            .subtract(pos)
+            .subtract(eyes)
             .normalize()
             .subtract(viewNormal)
             .lengthSquared();
     }
   }
-  
-  private Entity findTarget(final Vec3d pos, final Vec3d viewNormal, final Angle angles) {
-    return getWorld()
+
+  @Nullable
+  private Entity findTarget(
+      final World world, final Vec3d eyes, final Vec3d viewNormal, final Angle angles) {
+    return world
         .loadedEntityList
         .stream()
-        .filter(entity -> filterTarget(pos, viewNormal, angles, entity))
-        .min(Comparator.comparingDouble(entity -> selecting(pos, viewNormal, angles, entity)))
+        .filter(entity -> filterTarget(eyes, viewNormal, angles, entity))
+        .min(Comparator.comparingDouble(entity -> selecting(eyes, viewNormal, entity)))
         .orElse(null);
   }
-  
-  @Override
-  protected void onEnabled() {
-    PositionRotationManager.getManager().register(this, PriorityEnum.HIGHEST);
-  }
-  
-  @Override
-  public void onDisabled() {
-    PositionRotationManager.getManager().unregister(this);
-  }
-  
-  @Override
-  public void onLocalPlayerMovementUpdate(RotationState.Local state) {
-    Vec3d pos = EntityUtils.getEyePos(getLocalPlayer());
-    Vec3d look = getLocalPlayer().getLookVec();
-    Angle angles = AngleHelper.getAngleFacingInDegrees(look);
-    
-    Entity t = getTarget();
-    if (!hold_target.get()
-        || t == null
-        || !filterTarget(pos, look.normalize(), angles, getTarget())) {
-      setTarget(t = findTarget(pos, look.normalize(), angles));
+
+  private void aimProjectile(
+      RotationState.Local state, EntityPlayerSP player, Projectile projectile, Entity tar) {
+    final Vec3d shootPos = Projectile.getEntityShootPos(player);
+    final Vec3d inherited = getInheritedMotion();
+    final double force = projectile.getForce(getCharge(player));
+
+    Projectile.LaunchSolution solution = solveWithLead(projectile, shootPos, inherited, force, tar);
+
+    if (solution != null) {
+      state.setViewAngles(solution.getAngle(), silent.get());
     }
-    
-    if (t == null) {
-      return;
+  }
+
+  /**
+   * Aim point and flight time each depend on the other, so start from where the target is standing
+   * and let the two settle. It converges in two or three passes for anything a bow can reach.
+   */
+  @Nullable
+  private Projectile.LaunchSolution solveWithLead(
+      Projectile projectile, Vec3d shootPos, Vec3d inherited, double force, Entity tar) {
+    final Vec3d instant = EntityUtils.getInterpolatedAmount(tar, 1.D);
+    final Vec3d velocity = updateTargetVelocity(tar, instant);
+    final Vec3d lead =
+        projectilePredict.get()
+            ? velocity.scale(projectileLead.get() * getLeadConfidence(instant, velocity))
+            : Vec3d.ZERO;
+
+    double flightTicks = 0.D;
+    Projectile.LaunchSolution solution = null;
+
+    for (int i = 0; i < PREDICTION_ITERATIONS; i++) {
+      solution =
+          projectile.solveLaunch(shootPos, predictPosition(tar, lead, flightTicks), force, inherited);
+
+      if (solution == null) {
+        return null;
+      }
+      if (Math.abs(solution.getFlightTicks() - flightTicks) < PREDICTION_TOLERANCE) {
+        break;
+      }
+      flightTicks = solution.getFlightTicks();
     }
-    
-    final Entity tar = t;
-    Projectile projectile = getHeldProjectile();
-    
-    if (projectile.isNull() || !projectile_aimbot.get()) {
-      // melee aimbot
-      Angle va = Utils.getLookAtAngles(t).normalize();
-      state.setViewAngles(va, silent.get());
-      
-      if (canAttack(getLocalPlayer(), tar)) {
-        state.invokeLater(
-            rs -> {
-              getPlayerController().attackEntity(getLocalPlayer(), tar);
-              getLocalPlayer().swingArm(EnumHand.MAIN_HAND);
-            });
+    return solution;
+  }
+
+  /**
+   * Velocity taken from the position delta rather than motionX/Y/Z, which the client only
+   * interpolates for other players and is routinely stale or flat zero.
+   */
+  private Vec3d updateTargetVelocity(Entity tar, Vec3d instant) {
+    if (!Objects.equals(tar, velocityTarget)) {
+      velocityTarget = tar;
+      smoothedVelocity = instant;
+      return instant;
+    }
+    smoothedVelocity =
+        smoothedVelocity.scale(1.D - VELOCITY_SMOOTHING).add(instant.scale(VELOCITY_SMOOTHING));
+    return smoothedVelocity;
+  }
+
+  /**
+   * A target that just changed direction has an instant velocity far from its recent average, and
+   * extrapolating a stale heading is what makes a lead miss. Shrink the lead by how far the two
+   * have diverged instead of committing to it.
+   *
+   * <p>ponytail: this is a cheap stand in for the adaptive filtering the tracking literature uses
+   * (IMM over constant velocity/constant turn models). Swap it out if leading strafing players is
+   * still not good enough.
+   */
+  private double getLeadConfidence(Vec3d instant, Vec3d smoothed) {
+    double speed = smoothed.lengthVector();
+    if (speed < 1.0E-4D) {
+      return 0.D;
+    }
+    return Utils.clamp(1.D - instant.subtract(smoothed).lengthVector() / speed, 0.D, 1.D);
+  }
+
+  /**
+   * Where the target will be in the given number of ticks. Horizontal movement carries on as is,
+   * which is what a player holding a movement key actually does, while an airborne target follows
+   * the minecraft fall curve.
+   */
+  private Vec3d predictPosition(Entity tar, Vec3d lead, double ticks) {
+    Vec3d base = getAttackPosition(tar);
+
+    if (ticks <= 0.D || lead.lengthSquared() <= 0.D) {
+      return base;
+    }
+
+    double y = base.y;
+    if (!tar.onGround) {
+      double motionY = lead.y;
+      for (int i = 0; i < Math.min(ticks, PREDICTION_FALL_TICKS); i++) {
+        y += motionY;
+        motionY = (motionY - 0.08D) * 0.98D;
       }
     }
+    return new Vec3d(base.x + lead.x * ticks, y, base.z + lead.z * ticks);
+  }
+
+  enum Selector {
+    CROSSHAIR,
+    DISTANCE,
   }
 }

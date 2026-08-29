@@ -13,24 +13,31 @@ import org.lwjgl.input.Keyboard;
  */
 @RegisterMod
 public class GuiService extends ServiceMod {
-  
+
   public GuiService() {
     super("GUI");
   }
-  
+
   @Override
   public void onBindPressed(CallbackData cb) {
     if (Helper.getLocalPlayer() != null) {
-      MC.displayGuiScreen(ClickGui.getInstance());
+      if (MC.currentScreen instanceof ClickGui) {
+        ClickGui gui = (ClickGui) MC.currentScreen;
+        if (!gui.isCapturingInput()) {
+          MC.displayGuiScreen(null);
+        }
+      } else {
+        MC.displayGuiScreen(ClickGui.getInstance());
+      }
     }
   }
-  
+
   @Override
   protected StubBuilder buildStubCommand(StubBuilder builder) {
     return builder
-      .kpressed(this::onBindPressed)
-      .kdown(this::onBindKeyDown)
-      .bind(Keyboard.KEY_RSHIFT) // default to right shift
-      ;
+        .kpressed(this::onBindPressed)
+        .kdown(this::onBindKeyDown)
+        .bind(Keyboard.KEY_RSHIFT) // default to right shift
+        ;
   }
 }

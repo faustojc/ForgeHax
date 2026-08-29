@@ -12,11 +12,11 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
  */
 @RegisterMod
 public class NoSkylightUpdates extends ToggleMod {
-  
+
   public NoSkylightUpdates() {
     super(Category.RENDER, "NoSkylightUpdates", false, "Prevents skylight updates");
   }
-  
+
   @SubscribeEvent
   public void onLightingUpdate(WorldCheckLightForEvent event) {
     if (event.getEnumSkyBlock() == EnumSkyBlock.SKY) {

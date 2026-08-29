@@ -1,7 +1,6 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getWorld;
-
+import com.matt.forgehax.events.LocalPlayerUpdateEvent;
 import com.matt.forgehax.events.Render2DEvent;
 import com.matt.forgehax.util.color.Colors;
 import com.matt.forgehax.util.command.Setting;
@@ -18,13 +17,13 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.util.math.Vec3d;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import static com.matt.forgehax.Helper.getWorld;
+
 @RegisterMod
 public class ItemESP extends ToggleMod {
-  
-  public ItemESP() {
-    super(Category.RENDER, "ItemESP", false, "ESP for items");
-  }
-  
   public final Setting<Double> scale =
       getCommandStub()
           .builders()
@@ -34,7 +33,27 @@ public class ItemESP extends ToggleMod {
           .defaultTo(1.D)
           .min(0.D)
           .build();
-  
+  private final List<EntityItem> renderItems = new ArrayList<>();
+
+  public ItemESP() {
+    super(Category.RENDER, "ItemESP", false, "ESP for items");
+  }
+
+  @SubscribeEvent
+  public void onUpdate(LocalPlayerUpdateEvent event) {
+    renderItems.clear();
+    for (net.minecraft.entity.Entity entity : getWorld().loadedEntityList) {
+      if (entity instanceof EntityItem && entity.ticksExisted > 1) {
+        renderItems.add((EntityItem) entity);
+      }
+    }
+  }
+
+  @Override
+  protected void onDisabled() {
+    renderItems.clear();
+  }
+
   @SubscribeEvent
   public void onRender2D(final Render2DEvent event) {
     GlStateManager.enableBlend();
@@ -42,51 +61,46 @@ public class ItemESP extends ToggleMod {
         GlStateManager.SourceFactor.SRC_ALPHA,
         GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA,
         GlStateManager.SourceFactor.ONE,
-        GlStateManager.DestFactor.ZERO);
+        GlStateManager.DestFactor.ZERO
+    );
     GlStateManager.enableTexture2D();
     GlStateManager.disableDepth();
-    
+
     final double scale = this.scale.get() == 0 ? 1.D : this.scale.get();
-    
-    getWorld()
-        .loadedEntityList
-        .stream()
-        .filter(EntityItem.class::isInstance)
-        .map(EntityItem.class::cast)
-        .filter(entity -> entity.ticksExisted > 1)
-        .forEach(
-            entity -> {
-              Vec3d bottomPos = EntityUtils.getInterpolatedPos(entity, event.getPartialTicks());
-              Vec3d topPos =
-                  bottomPos.addVector(0.D, entity.getRenderBoundingBox().maxY - entity.posY, 0.D);
-              
-              Plane top = VectorUtils.toScreen(topPos);
-              Plane bot = VectorUtils.toScreen(bottomPos);
-              
-              if (!top.isVisible() && !bot.isVisible()) {
-                return;
-              }
-              
-              double offX = bot.getX() - top.getX();
-              double offY = bot.getY() - top.getY();
-              
-              GlStateManager.pushMatrix();
-              GlStateManager.translate(top.getX() - (offX / 2.D), bot.getY(), 0);
-              
-              ItemStack stack = entity.getItem();
-              String text =
-                  stack.getDisplayName() + (stack.isStackable() ? (" x" + stack.getCount()) : "");
-              
-              SurfaceHelper.drawTextShadow(
-                  text,
-                  (int) (offX / 2.D - SurfaceHelper.getTextWidth(text, scale) / 2.D),
-                  -(int) (offY - SurfaceHelper.getTextHeight(scale) / 2.D) - 1,
-                  Colors.WHITE.toBuffer(),
-                  scale);
-              
-              GlStateManager.popMatrix();
-            });
-    
+
+    for (EntityItem entity : renderItems) {
+      Vec3d bottomPos = EntityUtils.getInterpolatedPos(entity, event.getPartialTicks());
+      Vec3d topPos =
+          bottomPos.addVector(0.D, entity.getRenderBoundingBox().maxY - entity.posY, 0.D);
+
+      Plane top = VectorUtils.toScreen(topPos);
+      Plane bot = VectorUtils.toScreen(bottomPos);
+
+      if (!top.isVisible() && !bot.isVisible()) {
+        continue;
+      }
+
+      double offX = bot.getX() - top.getX();
+      double offY = bot.getY() - top.getY();
+
+      GlStateManager.pushMatrix();
+      GlStateManager.translate(top.getX() - (offX / 2.D), bot.getY(), 0);
+
+      ItemStack stack = entity.getItem();
+      String text =
+          stack.getDisplayName() + (stack.isStackable() ? (" x" + stack.getCount()) : "");
+
+      SurfaceHelper.drawTextShadow(
+          text,
+          (int) (offX / 2.D - SurfaceHelper.getTextWidth(text, scale) / 2.D),
+          -(int) (offY - SurfaceHelper.getTextHeight(scale) / 2.D) - 1,
+          Colors.WHITE.toBuffer(),
+          scale
+      );
+
+      GlStateManager.popMatrix();
+    }
+
     GlStateManager.enableDepth();
     GlStateManager.disableBlend();
   }

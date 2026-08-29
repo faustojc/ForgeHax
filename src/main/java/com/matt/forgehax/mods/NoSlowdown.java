@@ -1,7 +1,5 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getLocalPlayer;
-
 import com.matt.forgehax.asm.ForgeHaxHooks;
 import com.matt.forgehax.asm.events.DoBlockCollisionsEvent;
 import com.matt.forgehax.util.mod.Category;
@@ -11,13 +9,15 @@ import net.minecraft.block.Block;
 import net.minecraft.block.BlockSoulSand;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
+import static com.matt.forgehax.Helper.getLocalPlayer;
+
 @RegisterMod
 public class NoSlowdown extends ToggleMod {
-  
+
   public NoSlowdown() {
     super(Category.PLAYER, "NoSlowDown", false, "Disables block slowdown");
   }
-  
+
   @Override
   public void onEnabled() {
     ForgeHaxHooks.isNoSlowDownActivated = true;
@@ -26,7 +26,7 @@ public class NoSlowdown extends ToggleMod {
     } catch (Exception e) {
     }
   }
-  
+
   @Override
   public void onDisabled() {
     ForgeHaxHooks.isNoSlowDownActivated = false;
@@ -35,7 +35,7 @@ public class NoSlowdown extends ToggleMod {
     } catch (Exception e) {
     }
   }
-  
+
   @SubscribeEvent
   public void onDoApplyBlockMovement(DoBlockCollisionsEvent event) {
     if (event.getEntity().equals(getLocalPlayer())) {

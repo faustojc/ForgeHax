@@ -29,23 +29,23 @@ import java.util.Scanner;
  * Created on 4/25/2017 by fr1kin
  */
 public class Helper implements Globals {
-  
+
   public static CommandGlobal getGlobalCommand() {
     return CommandGlobal.getInstance();
   }
-  
+
   public static Minecraft getMinecraft() {
     return MC;
   }
-  
+
   public static ModManager getModManager() {
     return ModManager.getInstance();
   }
-  
+
   public static FileManager getFileManager() {
     return FileManager.getInstance();
   }
-  
+
   public static Logger getLog() {
     return LOGGER;
   }
@@ -57,7 +57,7 @@ public class Helper implements Globals {
   public static EntityPlayerSP getLocalPlayer() {
     return MC.player;
   }
-  
+
   @Nullable
   public static Entity getRidingEntity() {
     if (getLocalPlayer() != null) {
@@ -66,39 +66,39 @@ public class Helper implements Globals {
       return null;
     }
   }
-  
+
   public static Optional<Entity> getOptionalRidingEntity() {
     return Optional.ofNullable(getRidingEntity());
   }
-  
+
   // Returns the riding entity if present, otherwise the local player
   @Nullable
   public static Entity getRidingOrPlayer() {
     return getRidingEntity() != null ? getRidingEntity() : getLocalPlayer();
   }
-  
+
   @Nullable
   public static WorldClient getWorld() {
     return MC.world;
   }
-  
+
   public static World getWorld(Entity entity) {
     return entity.getEntityWorld();
   }
-  
+
   public static World getWorld(TileEntity tileEntity) {
     return tileEntity.getWorld();
   }
-  
+
   @Nullable
   public static NetworkManager getNetworkManager() {
     return FMLClientHandler.instance().getClientToServerNetworkManager();
   }
-  
+
   public static PlayerControllerMP getPlayerController() {
     return MC.playerController;
   }
-  
+
   public static void printMessageNaked(
       String startWith, String message, Style firstStyle, Style secondStyle) {
     if (!Strings.isNullOrEmpty(message)) {
@@ -122,7 +122,7 @@ public class Helper implements Globals {
       }
     }
   }
-  
+
   // private function that is ultimately used to output the message
   private static void outputMessage(String text) {
     if (getLocalPlayer() != null) {
@@ -131,36 +131,39 @@ public class Helper implements Globals {
       ((CommandInputGui) MC.currentScreen).print(text);
     }
   }
-  
+
   public static void printMessageNaked(String append, String message, Style style) {
     printMessageNaked(append, message, style, style);
   }
-  
+
   public static void printMessageNaked(String append, String message) {
     printMessageNaked(
         append,
         message,
         new Style().setColor(TextFormatting.WHITE),
-        new Style().setColor(TextFormatting.GRAY));
+        new Style().setColor(TextFormatting.GRAY)
+    );
   }
-  
+
   public static void printMessageNaked(String message) {
     printMessageNaked("", message);
   }
-  
+
   // Will append '[FH] ' in front
   public static void printMessage(String message) {
     if (!Strings.isNullOrEmpty(message)) {
       printMessageNaked("[FH] " + message);
     }
   }
-  
+
   public static void printMessage(String format, Object... args) {
     printMessage(String.format(format, args));
   }
-  
-  private static ITextComponent getFormattedText(String text, TextFormatting color,
-      boolean bold, boolean italic) {
+
+  private static ITextComponent getFormattedText(
+      String text, TextFormatting color,
+      boolean bold, boolean italic
+  ) {
     return new TextComponentString(text.replaceAll("\r", ""))
         .setStyle(new Style()
             .setColor(color)
@@ -168,52 +171,60 @@ public class Helper implements Globals {
             .setItalic(italic)
         );
   }
-  
+
   public static void printInform(String format, Object... args) {
     outputMessage(
         getFormattedText("[ForgeHax]", TextFormatting.GREEN, true, false)
             .appendSibling(
-                getFormattedText(" " + String.format(format, args).trim(),
-                    TextFormatting.GRAY, false, false)
+                getFormattedText(
+                    " " + String.format(format, args).trim(),
+                    TextFormatting.GRAY, false, false
+                )
             ).getFormattedText()
     );
   }
-  
+
   public static void printWarning(String format, Object... args) {
     outputMessage(
         getFormattedText("[ForgeHax]", TextFormatting.YELLOW, true, false)
             .appendSibling(
-                getFormattedText(" " + String.format(format, args).trim(),
-                    TextFormatting.GRAY, false, false)
+                getFormattedText(
+                    " " + String.format(format, args).trim(),
+                    TextFormatting.GRAY, false, false
+                )
             ).getFormattedText()
     );
   }
-  
+
   public static void printError(String format, Object... args) {
     outputMessage(
         getFormattedText("[ForgeHax]", TextFormatting.RED, true, false)
             .appendSibling(
-                getFormattedText(" " + String.format(format, args).trim(),
-                    TextFormatting.GRAY, false, false)
+                getFormattedText(
+                    " " + String.format(format, args).trim(),
+                    TextFormatting.GRAY, false, false
+                )
             ).getFormattedText()
     );
   }
-  
+
   public static void printStackTrace(Throwable t) {
     getLog().error(Throwables.getStackTraceAsString(t));
   }
-  
+
   public static void handleThrowable(Throwable t) {
-    getLog().error(String.format("[%s] %s",
+    getLog().error(String.format(
+        "[%s] %s",
         t.getClass().getSimpleName(),
-        Strings.nullToEmpty(t.getMessage())));
-    
+        Strings.nullToEmpty(t.getMessage())
+    ));
+
     if (t.getCause() != null) {
       handleThrowable(t.getCause());
     }
     printStackTrace(t);
   }
-  
+
   public static void reloadChunks() {
     // credits to 0x22
     if (getWorld() != null && getLocalPlayer() != null) {
@@ -222,15 +233,15 @@ public class Helper implements Globals {
             int x = (int) getLocalPlayer().posX;
             int y = (int) getLocalPlayer().posY;
             int z = (int) getLocalPlayer().posZ;
-            
+
             int distance = MC.gameSettings.renderDistanceChunks * 16;
-            
+
             MC.renderGlobal.markBlockRangeForRenderUpdate(
                 x - distance, y - distance, z - distance, x + distance, y + distance, z + distance);
           });
     }
   }
-  
+
   public static void reloadChunksHard() {
     MC.addScheduledTask(
         () -> {

@@ -10,16 +10,16 @@ import com.matt.forgehax.util.mod.loader.RegisterMod;
  */
 @RegisterMod
 public class ExtraTab extends ToggleMod {
-  
+
   public ExtraTab() {
     super(Category.MISC, "ExtraTab", false, "Increase max size of tab list");
   }
-  
+
   @Override
   public void onEnabled() {
     ForgeHaxHooks.doIncreaseTabListSize = true;
   }
-  
+
   @Override
   public void onDisabled() {
     ForgeHaxHooks.doIncreaseTabListSize = false;

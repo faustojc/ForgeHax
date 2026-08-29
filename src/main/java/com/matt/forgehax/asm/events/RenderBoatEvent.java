@@ -9,23 +9,23 @@ import net.minecraftforge.fml.common.eventhandler.Event;
  */
 @Cancelable
 public class RenderBoatEvent extends Event {
-  
+
+  private final EntityBoat boat;
   private float yaw;
-  private EntityBoat boat;
-  
+
   public RenderBoatEvent(EntityBoat boatIn, float entityYaw) {
     this.boat = boatIn;
     this.yaw = entityYaw;
   }
-  
-  public void setYaw(float yawIn) {
-    this.yaw = yawIn;
-  }
-  
+
   public float getYaw() {
     return this.yaw;
   }
-  
+
+  public void setYaw(float yawIn) {
+    this.yaw = yawIn;
+  }
+
   public EntityBoat getBoat() {
     return this.boat;
   }

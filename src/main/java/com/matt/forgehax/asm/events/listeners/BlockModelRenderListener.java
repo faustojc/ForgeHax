@@ -9,6 +9,6 @@ import net.minecraft.util.math.BlockPos;
  * Created on 5/8/2017 by fr1kin
  */
 public interface BlockModelRenderListener extends ListenerHook {
-  
+
   void onBlockRenderInLoop(RenderChunk renderChunk, Block block, IBlockState state, BlockPos pos);
 }

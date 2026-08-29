@@ -36,11 +36,11 @@ public class ThisModIsDedicatedToUfoCrossing extends ToggleMod {
       final SPacketSpawnPlayer packet = event.getPacket();
       final UUID id = packet.getUniqueId();
       Optional.ofNullable(MC.getConnection().getPlayerInfo(id))
-        .map(NetworkPlayerInfo::getGameProfile)
-        .map(GameProfile::getName)
-        .ifPresent(name -> {
-          MC.player.sendChatMessage("/w " + name + " " + message.get());
-        });
+              .map(NetworkPlayerInfo::getGameProfile)
+              .map(GameProfile::getName)
+              .ifPresent(name -> {
+                MC.player.sendChatMessage("/w " + name + " " + message.get());
+              });
     }
   }
 

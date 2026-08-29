@@ -9,5 +9,4 @@ public enum InjectPriority {
   DEFAULT,
   LOW,
   LOWEST,
-  ;
 }

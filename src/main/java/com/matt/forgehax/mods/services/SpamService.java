@@ -1,7 +1,5 @@
 package com.matt.forgehax.mods.services;
 
-import static com.matt.forgehax.Helper.getLocalPlayer;
-
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.matt.forgehax.events.LocalPlayerUpdateEvent;
@@ -9,44 +7,27 @@ import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.mod.ServiceMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
 import com.matt.forgehax.util.spam.SpamMessage;
+import joptsimple.internal.Strings;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
-import joptsimple.internal.Strings;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+
+import static com.matt.forgehax.Helper.getLocalPlayer;
 
 /**
  * Created on 7/21/2017 by fr1kin
  */
 @RegisterMod
 public class SpamService extends ServiceMod {
-  
+
   private static final List<SpamMessage> SENDING = Lists.newCopyOnWriteArrayList();
-  
-  public static boolean send(SpamMessage spam) {
-    if (!SENDING.contains(spam)) {
-      return SENDING.add(spam);
-    } else {
-      return false;
-    }
-  }
-  
-  public static boolean isActivatorPresent(String activator) {
-    if (activator == null) {
-      return false;
-    }
-    for (SpamMessage msg : SENDING) {
-      if (activator.equalsIgnoreCase(msg.getActivator())) {
-        return true;
-      }
-    }
-    return false;
-  }
-  
-  public static boolean isEmpty() {
-    return SENDING.isEmpty();
-  }
-  
+  private final Map<String, AtomicLong> customDelays = Maps.newConcurrentMap();
+  /**
+   * Next time to send a message
+   */
+  private long nextSendMs = 0L;
   public final Setting<Long> delay =
       getCommandStub()
           .builders()
@@ -59,18 +40,35 @@ public class SpamService extends ServiceMod {
                 nextSendMs = 0L;
               })
           .build();
-  
-  /**
-   * Next time to send a message
-   */
-  private long nextSendMs = 0L;
-  
-  private Map<String, AtomicLong> customDelays = Maps.newConcurrentMap();
-  
+
   public SpamService() {
     super("SpamService");
   }
-  
+
+  public static boolean send(SpamMessage spam) {
+    if (!SENDING.contains(spam)) {
+      return SENDING.add(spam);
+    } else {
+      return false;
+    }
+  }
+
+  public static boolean isActivatorPresent(String activator) {
+    if (activator == null) {
+      return false;
+    }
+    for (SpamMessage msg : SENDING) {
+      if (activator.equalsIgnoreCase(msg.getActivator())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public static boolean isEmpty() {
+    return SENDING.isEmpty();
+  }
+
   @Override
   protected void onLoad() {
     getCommandStub()
@@ -88,7 +86,7 @@ public class SpamService extends ServiceMod {
             })
         .build();
   }
-  
+
   @SubscribeEvent
   public void onTick(LocalPlayerUpdateEvent event) {
     if (!SENDING.isEmpty() && System.currentTimeMillis() > nextSendMs) {

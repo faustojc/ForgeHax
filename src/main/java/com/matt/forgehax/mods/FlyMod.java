@@ -1,15 +1,11 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getLocalPlayer;
-import static com.matt.forgehax.Helper.getNetworkManager;
-
 import com.matt.forgehax.Helper;
 import com.matt.forgehax.asm.events.PacketEvent;
 import com.matt.forgehax.events.LocalPlayerUpdateEvent;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import java.util.Objects;
 import net.minecraft.network.play.client.CPacketEntityAction;
 import net.minecraft.network.play.client.CPacketEntityAction.Action;
 import net.minecraft.network.play.client.CPacketPlayer;
@@ -17,30 +13,35 @@ import net.minecraft.network.play.server.SPacketPlayerPosLook;
 import net.minecraftforge.fml.common.ObfuscationReflectionHelper;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
+import java.util.Objects;
+
+import static com.matt.forgehax.Helper.getLocalPlayer;
+import static com.matt.forgehax.Helper.getNetworkManager;
+
 @RegisterMod
 @SuppressWarnings("MethodCallSideOnly")
 public class FlyMod extends ToggleMod {
-  
+
   private boolean zoomies = true;
-  
+
   public FlyMod() {
     super(Category.PLAYER, "Fly", false, "Enables flying");
   }
-  
+
   @Override
   public void onDisabled() {
     if (Objects.nonNull(getLocalPlayer())) {
       getLocalPlayer().noClip = false;
     }
   }
-  
+
   @SubscribeEvent
   public void onLocalPlayerUpdate(LocalPlayerUpdateEvent event) {
     try {
       double[] dir = moveLooking(0);
       double xDir = dir[0];
       double zDir = dir[1];
-      
+
       if ((MC.gameSettings.keyBindForward.isKeyDown()
           || MC.gameSettings.keyBindLeft.isKeyDown()
           || MC.gameSettings.keyBindRight.isKeyDown()
@@ -71,7 +72,8 @@ public class FlyMod extends ToggleMod {
                   MC.player.posZ + MC.player.motionZ,
                   MC.player.rotationYaw,
                   MC.player.rotationPitch,
-                  false));
+                  false
+              ));
       getNetworkManager()
           .sendPacket(
               new CPacketPlayer.PositionRotation(
@@ -80,26 +82,27 @@ public class FlyMod extends ToggleMod {
                   MC.player.posZ + MC.player.motionZ,
                   MC.player.rotationYaw,
                   MC.player.rotationPitch,
-                  true));
+                  true
+              ));
       getNetworkManager().sendPacket(new CPacketEntityAction(MC.player, Action.START_FALL_FLYING));
       MC.player.setPosition(posX, posY, posZ);
-      
+
       zoomies = !zoomies;
-      
+
       MC.player.motionX = 0;
       MC.player.motionY = 0;
       MC.player.motionZ = 0;
-      
+
       MC.player.noClip = true;
     } catch (Exception e) {
       Helper.printStackTrace(e);
     }
   }
-  
+
   public double[] moveLooking(int ignored) {
     return new double[]{MC.player.rotationYaw * 360 / 360 * 180 / 180, 0};
   }
-  
+
   @SubscribeEvent
   public void onOutgoingPacketSent(PacketEvent.Incoming.Pre event) {
     if (event.getPacket() instanceof SPacketPlayerPosLook) {
@@ -111,14 +114,16 @@ public class FlyMod extends ToggleMod {
             MC.player.rotationYaw,
             "yaw",
             "field_148936_d",
-            "d");
+            "d"
+        );
         ObfuscationReflectionHelper.setPrivateValue(
             SPacketPlayerPosLook.class,
             packet,
             MC.player.rotationPitch,
             "pitch",
             "field_148937_e",
-            "e");
+            "e"
+        );
       } catch (Exception e) {
       }
     }

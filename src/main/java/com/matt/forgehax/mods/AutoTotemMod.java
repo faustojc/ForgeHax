@@ -5,8 +5,6 @@ import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import java.util.OptionalInt;
-import java.util.stream.IntStream;
 import net.minecraft.init.Items;
 import net.minecraft.inventory.ClickType;
 import net.minecraft.inventory.EntityEquipmentSlot;
@@ -14,15 +12,13 @@ import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
+import java.util.OptionalInt;
+import java.util.stream.IntStream;
+
 @RegisterMod
 public class AutoTotemMod extends ToggleMod {
-  
-  private final int OFFHAND_SLOT = 45;
-  
-  public AutoTotemMod() {
-    super(Category.COMBAT, "AutoTotem", false, "Automatically move totems to off-hand");
-  }
 
+  private final int OFFHAND_SLOT = 45;
   private final Setting<Boolean> allowGui =
       getCommandStub()
           .builders()
@@ -33,16 +29,20 @@ public class AutoTotemMod extends ToggleMod {
           .defaultTo(false)
           .build();
 
+  public AutoTotemMod() {
+    super(Category.COMBAT, "AutoTotem", false, "Automatically move totems to off-hand");
+  }
+
   @Override
   public String getDisplayText() {
     final long totemCount =
         IntStream.rangeClosed(9, 45) // include offhand slot
-            .mapToObj(i -> MC.player.inventoryContainer.getSlot(i).getStack().getItem())
-            .filter(stack -> stack == Items.TOTEM_OF_UNDYING)
-            .count();
+                 .mapToObj(i -> MC.player.inventoryContainer.getSlot(i).getStack().getItem())
+                 .filter(stack -> stack == Items.TOTEM_OF_UNDYING)
+                 .count();
     return String.format(super.getDisplayText() + "[%d]", totemCount);
   }
-  
+
   @SubscribeEvent
   public void onPlayerUpdate(LocalPlayerUpdateEvent event) {
     if (!getOffhand().isEmpty()) {
@@ -51,7 +51,7 @@ public class AutoTotemMod extends ToggleMod {
     if (MC.currentScreen != null && !allowGui.getAsBoolean()) {
       return; // if in inventory
     }
-    
+
     findItem(Items.TOTEM_OF_UNDYING)
         .ifPresent(
             slot -> {
@@ -59,11 +59,11 @@ public class AutoTotemMod extends ToggleMod {
               invPickup(OFFHAND_SLOT);
             });
   }
-  
+
   private void invPickup(final int slot) {
     MC.playerController.windowClick(0, slot, 0, ClickType.PICKUP, MC.player);
   }
-  
+
   private OptionalInt findItem(final Item ofType) {
     for (int i = 9; i <= 44; i++) {
       if (MC.player.inventoryContainer.getSlot(i).getStack().getItem() == ofType) {
@@ -72,7 +72,7 @@ public class AutoTotemMod extends ToggleMod {
     }
     return OptionalInt.empty();
   }
-  
+
   private ItemStack getOffhand() {
     return MC.player.getItemStackFromSlot(EntityEquipmentSlot.OFFHAND);
   }

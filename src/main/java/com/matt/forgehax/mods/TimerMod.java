@@ -16,11 +16,16 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
  */
 @RegisterMod
 public class TimerMod extends ToggleMod {
-  
-  public TimerMod() {
-    super(Category.MISC, "Timer", false, "Speed up game time");
-  }
-  
+
+  public final Setting<Boolean> tpsSync =
+      getCommandStub()
+          .builders()
+          .<Boolean>newSettingBuilder()
+          .name("tps-sync")
+          .description("sync timer to tps")
+          .defaultTo(false)
+          .build();
+  private final float DEFAULT_SPEED = 1000f / 20; // default speed - 50 ms
   public final Setting<Float> factor =
       getCommandStub()
           .builders()
@@ -35,34 +40,27 @@ public class TimerMod extends ToggleMod {
             }
           })
           .build();
-  
-  public final Setting<Boolean> tpsSync =
-      getCommandStub()
-          .builders()
-          .<Boolean>newSettingBuilder()
-          .name("tps-sync")
-          .description("sync timer to tps")
-          .defaultTo(false)
-          .build();
-  
-  private final float DEFAULT_SPEED = 1000f / 20; // default speed - 50 ms
-  
+
+  public TimerMod() {
+    super(Category.MISC, "Timer", false, "Speed up game time");
+  }
+
   @Override
   public void onEnabled() {
     updateTimer();
   }
-  
+
   @Override
   public void onDisabled() {
     setSpeed(DEFAULT_SPEED);
   }
-  
+
   private void updateTimer() {
     if (!tpsSync.getAsBoolean()) {
       setSpeed(DEFAULT_SPEED / factor.getAsFloat());
     }
   }
-  
+
   @SubscribeEvent
   public void onPacketPreceived(PacketEvent.Incoming.Pre event) {
     if (event.getPacket() instanceof SPacketTimeUpdate && tpsSync.getAsBoolean()) {
@@ -75,12 +73,12 @@ public class TimerMod extends ToggleMod {
       updateTimer();
     }
   }
-  
+
   private void setSpeed(float value) {
     Timer timer = FastReflection.Fields.Minecraft_timer.get(MC);
     FastReflection.Fields.Timer_tickLength.set(timer, value);
   }
-  
+
   @Override
   public String getDisplayText() {
     if (tpsSync.getAsBoolean()) {
@@ -94,4 +92,6 @@ public class TimerMod extends ToggleMod {
     }
     return super.getDisplayText();
   }
+
+
 }

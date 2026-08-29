@@ -16,7 +16,8 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
  */
 @RegisterMod
 public class CompassMod extends ToggleMod {
-  
+
+  private static final double HALF_PI = Math.PI / 2;
   public final Setting<Double> scale =
       getCommandStub()
           .builders()
@@ -25,48 +26,11 @@ public class CompassMod extends ToggleMod {
           .description("size of the compass")
           .defaultTo(3.D)
           .build();
-  
-  private static final double HALF_PI = Math.PI / 2;
-  
-  private enum Direction {
-    N,
-    W,
-    S,
-    E
-  }
-  
+
   public CompassMod() {
     super(Category.RENDER, "Compass", false, "cool compass overlay");
   }
-  
-  @SubscribeEvent
-  public void onRender(Render2DEvent event) {
-    final double centerX = event.getScreenWidth() / 2;
-    final double centerY = event.getScreenHeight() * 0.8;
-    
-    for (Direction dir : Direction.values()) {
-      double rad = getPosOnCompass(dir);
-      SurfaceHelper.drawTextShadowCentered(
-          dir.name(),
-          (float) (centerX + getX(rad)),
-          (float) (centerY + getY(rad)),
-          dir == Direction.N ? Colors.RED.toBuffer() : Colors.WHITE.toBuffer());
-      
-    }
-    
-  }
-  
-  private double getX(double rad) {
-    return Math.sin(rad) * (scale.getAsDouble() * 10);
-  }
-  
-  private double getY(double rad) {
-    final double epicPitch = MathHelper
-        .clamp(Helper.getRenderEntity().rotationPitch + 30f, -90f, 90f);
-    final double pitchRadians = Math.toRadians(epicPitch); // player pitch
-    return Math.cos(rad) * Math.sin(pitchRadians) * (scale.getAsDouble() * 10);
-  }
-  
+
   // return the position on the circle in radians
   private static double getPosOnCompass(Direction dir) {
     double yaw =
@@ -74,5 +38,41 @@ public class CompassMod extends ToggleMod {
             MathHelper.wrapDegrees(Helper.getRenderEntity().rotationYaw)); // player yaw
     int index = dir.ordinal();
     return yaw + (index * HALF_PI);
+  }
+
+  @SubscribeEvent
+  public void onRender(Render2DEvent event) {
+    final double centerX = event.getScreenWidth() / 2;
+    final double centerY = event.getScreenHeight() * 0.8;
+
+    for (Direction dir : Direction.values()) {
+      double rad = getPosOnCompass(dir);
+      SurfaceHelper.drawTextShadowCentered(
+          dir.name(),
+          (float) (centerX + getX(rad)),
+          (float) (centerY + getY(rad)),
+          dir == Direction.N ? Colors.RED.toBuffer() : Colors.WHITE.toBuffer()
+      );
+
+    }
+
+  }
+
+  private double getX(double rad) {
+    return Math.sin(rad) * (scale.getAsDouble() * 10);
+  }
+
+  private double getY(double rad) {
+    final double epicPitch = MathHelper
+        .clamp(Helper.getRenderEntity().rotationPitch + 30f, -90f, 90f);
+    final double pitchRadians = Math.toRadians(epicPitch); // player pitch
+    return Math.cos(rad) * Math.sin(pitchRadians) * (scale.getAsDouble() * 10);
+  }
+
+  private enum Direction {
+    N,
+    W,
+    S,
+    E
   }
 }

@@ -22,13 +22,13 @@ import static com.matt.forgehax.Helper.getRenderEntity;
  */
 @RegisterMod
 public class RenderEventService extends ServiceMod {
-  
+
   private static final GeometryTessellator TESSELLATOR = new GeometryTessellator();
-  
+
   public RenderEventService() {
     super("RenderEventService");
   }
-  
+
   @SubscribeEvent
   public void onRenderWorld(RenderWorldLastEvent event) {
     GlStateManager.pushMatrix();
@@ -38,17 +38,17 @@ public class RenderEventService extends ServiceMod {
     GlStateManager.tryBlendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, 1, 0);
     GlStateManager.shadeModel(GL11.GL_SMOOTH);
     GlStateManager.disableDepth();
-    
+
     GlStateManager.glLineWidth(1.f);
-    
+
     Vec3d renderPos = EntityUtils.getInterpolatedPos(getRenderEntity(), event.getPartialTicks());
-    
+
     RenderEvent e = new RenderEvent(TESSELLATOR, renderPos, event.getPartialTicks());
     e.resetTranslation();
     MinecraftForge.EVENT_BUS.post(e);
-    
+
     GlStateManager.glLineWidth(1.f);
-    
+
     GlStateManager.shadeModel(GL11.GL_FLAT);
     GlStateManager.disableBlend();
     GlStateManager.enableAlpha();
@@ -57,7 +57,7 @@ public class RenderEventService extends ServiceMod {
     GlStateManager.enableCull();
     GlStateManager.popMatrix();
   }
-  
+
   @SubscribeEvent(priority = EventPriority.LOW)
   public void onRenderGameOverlayEvent(final RenderGameOverlayEvent.Text event) {
     if (event.getType().equals(RenderGameOverlayEvent.ElementType.TEXT)) {

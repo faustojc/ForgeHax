@@ -15,3 +15,5 @@ private/src
 libs/journeymap*
 
 .gradle/
+graphify-out/
+logs/

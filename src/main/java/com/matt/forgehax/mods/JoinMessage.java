@@ -1,8 +1,5 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.util.spam.SpamTokens.MESSAGE;
-import static com.matt.forgehax.util.spam.SpamTokens.PLAYER_NAME;
-
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.FutureCallback;
@@ -23,24 +20,28 @@ import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
 import com.matt.forgehax.util.spam.SpamMessage;
 import com.matt.forgehax.util.spam.SpamTokens;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicLong;
-import javax.annotation.Nullable;
 import joptsimple.internal.Strings;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.util.text.Style;
 import net.minecraft.util.text.TextFormatting;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
+import javax.annotation.Nullable;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
+
+import static com.matt.forgehax.util.spam.SpamTokens.MESSAGE;
+import static com.matt.forgehax.util.spam.SpamTokens.PLAYER_NAME;
+
 /**
  * Created on 7/21/2017 by fr1kin
  */
 @RegisterMod
 public class JoinMessage extends ToggleMod {
-  
+
   private static final SpamTokens[] SPAM_TOKENS = new SpamTokens[]{PLAYER_NAME, MESSAGE};
-  
+
   private final Options<CustomMessageEntry> messages =
       getCommandStub()
           .builders()
@@ -50,7 +51,7 @@ public class JoinMessage extends ToggleMod {
           .factory(CustomMessageEntry::new)
           .supplier(Sets::newConcurrentHashSet)
           .build();
-  
+
   private final Setting<String> keyword =
       getCommandStub()
           .builders()
@@ -59,7 +60,7 @@ public class JoinMessage extends ToggleMod {
           .description("Keyword for the join message")
           .defaultTo("!joinmessage")
           .build();
-  
+
   private final Setting<String> format =
       getCommandStub()
           .builders()
@@ -69,7 +70,7 @@ public class JoinMessage extends ToggleMod {
               "Join message format (Use {PLAYER_NAME} for the player joining, {MESSAGE} for the set message)")
           .defaultTo("<{PLAYER_NAME}> {MESSAGE}")
           .build();
-  
+
   private final Setting<Long> delay =
       getCommandStub()
           .builders()
@@ -78,7 +79,7 @@ public class JoinMessage extends ToggleMod {
           .description("Delay between each message in ms")
           .defaultTo(15000L)
           .build();
-  
+
   private final Setting<Integer> message_length =
       getCommandStub()
           .builders()
@@ -87,7 +88,7 @@ public class JoinMessage extends ToggleMod {
           .description("Maximum length of a custom message")
           .defaultTo(25)
           .build();
-  
+
   private final Setting<Boolean> use_offline =
       getCommandStub()
           .builders()
@@ -96,7 +97,7 @@ public class JoinMessage extends ToggleMod {
           .description("Allows non-authenticated player names to be added")
           .defaultTo(false)
           .build();
-  
+
   private final Setting<Long> set_cooldown =
       getCommandStub()
           .builders()
@@ -105,7 +106,7 @@ public class JoinMessage extends ToggleMod {
           .description("Setting cooldown for individual players in ms")
           .defaultTo(15000L)
           .build();
-  
+
   private final Setting<Integer> max_player_messages =
       getCommandStub()
           .builders()
@@ -114,14 +115,14 @@ public class JoinMessage extends ToggleMod {
           .description("Maximum number of messages per individual player")
           .defaultTo(5)
           .min(1)
-          .max(Integer.MAX_VALUE)
+          .max(100)
           .changed(
               cb -> {
                 messages.forEach(e -> e.setSize(cb.getTo()));
                 messages.serialize();
               })
           .build();
-  
+
   private final Setting<Boolean> debug_messages =
       getCommandStub()
           .builders()
@@ -130,59 +131,59 @@ public class JoinMessage extends ToggleMod {
           .description("Displays messages in chat if a player fails to use the command properly")
           .defaultTo(false)
           .build();
-  
+
   private final Map<UUID, AtomicLong> cooldowns = Maps.newConcurrentMap();
-  
+
   public JoinMessage() {
     super(Category.MISC, "JoinMessage", false, "Allows players to add custom join messages");
   }
-  
+
   private void debugMessage(String str) {
     if (debug_messages.get()) {
       Helper.printMessageNaked(
           Strings.EMPTY, str, new Style().setItalic(true).setColor(TextFormatting.GRAY));
     }
   }
-  
+
   private void setJoinMessage(UUID target, UUID setter, String message) {
     CustomMessageEntry entry = messages.get(target);
     if (entry == null) {
       entry = new CustomMessageEntry(target);
       messages.add(entry);
     }
-    
+
     String replyMessage = "Join message changed.";
-    
+
     if (!entry.containsEntry(setter)) {
       entry.setSize(max_player_messages.get() - 1); // evict a random message
       replyMessage = "Join message set.";
     }
     entry.addMessage(setter, message); // correct size now
-    
+
     // set cooldown
     cooldowns
         .computeIfAbsent(setter, s -> new AtomicLong(0L))
         .set(System.currentTimeMillis() + set_cooldown.get());
-    
+
     messages.serialize();
-    
+
     SpamService.send(
         new SpamMessage(replyMessage, "JOIN_MESSAGE_REPLY", 0, null, PriorityEnum.HIGHEST));
   }
-  
+
   @SubscribeEvent
   public void onPlayerChat(ChatMessageEvent event) {
     String[] args = event.getMessage().split(" ");
-    
+
     if (args.length < 3) {
       return; // not enough arguments
     }
-    
+
     final String keyword = ArrayHelper.getOrDefault(args, 0, Strings.EMPTY);
     if (!this.keyword.get().equalsIgnoreCase(keyword)) {
       return;
     }
-    
+
     final String target = ArrayHelper.getOrDefault(args, 1, Strings.EMPTY);
     if (target.length() > PlayerInfoHelper.MAX_NAME_LENGTH) {
       debugMessage("Input name over valid length");
@@ -192,7 +193,7 @@ public class JoinMessage extends ToggleMod {
       debugMessage("Cannot set own join message");
       return;
     }
-    
+
     final String message = CommandHelper.join(args, " ", 2, args.length);
     if (Strings.isNullOrEmpty(message)) {
       debugMessage("Invalid message (null or empty)");
@@ -202,20 +203,20 @@ public class JoinMessage extends ToggleMod {
       debugMessage("Message over maximum specified by JoinMessage.message_length");
       return;
     }
-    
+
     // setter is not in cooldown
     if (System.currentTimeMillis()
         < cooldowns.getOrDefault(event.getSender().getId(), new AtomicLong(0L)).get()) {
       debugMessage("Player is currently in a cooldown");
       return;
     }
-    
+
     if (use_offline.get()) {
       // use offline ID
       setJoinMessage(EntityPlayerSP.getOfflineUUID(target), event.getSender().getId(), message);
       return; // join message set, stop here
     }
-    
+
     PlayerInfoHelper.registerWithCallback(
         target,
         new FutureCallback<PlayerInfo>() {
@@ -225,13 +226,14 @@ public class JoinMessage extends ToggleMod {
               setJoinMessage(result.getId(), event.getSender().getId(), message);
             }
           }
-          
+
           @Override
           public void onFailure(Throwable t) {
           }
-        });
+        }
+    );
   }
-  
+
   @SubscribeEvent
   public void onPlayerConnect(PlayerConnectEvent.Join event) {
     CustomMessageEntry entry = messages.get(event.getPlayerInfo().getId());
@@ -246,11 +248,13 @@ public class JoinMessage extends ToggleMod {
                   format.get(),
                   SPAM_TOKENS,
                   event.getPlayerInfo().getName(),
-                  entry.getRandomMessage()),
+                  entry.getRandomMessage()
+              ),
               "JOIN_MESSAGE",
               delay.get(),
               null,
-              PriorityEnum.HIGH));
+              PriorityEnum.HIGH
+          ));
     }
   }
 }

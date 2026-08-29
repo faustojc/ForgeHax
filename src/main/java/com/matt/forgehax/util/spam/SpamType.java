@@ -8,10 +8,9 @@ public enum SpamType {
    * Randomly select from list
    */
   RANDOM,
-  
+
   /**
    * Sequentially select from list
    */
   SEQUENTIAL,
-  ;
 }

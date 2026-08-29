@@ -1,7 +1,5 @@
 package com.matt.forgehax.mods.services;
 
-import static com.matt.forgehax.Helper.getLog;
-
 import com.google.common.util.concurrent.FutureCallback;
 import com.matt.forgehax.asm.events.PacketEvent;
 import com.matt.forgehax.events.PlayerConnectEvent;
@@ -12,10 +10,6 @@ import com.matt.forgehax.util.entity.PlayerInfoHelper;
 import com.matt.forgehax.util.mod.ServiceMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
 import com.mojang.authlib.GameProfile;
-import java.util.Objects;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
-import javax.annotation.Nullable;
 import joptsimple.internal.Strings;
 import net.minecraft.network.play.server.SPacketChunkData;
 import net.minecraft.network.play.server.SPacketCustomPayload;
@@ -25,12 +19,19 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.network.FMLNetworkEvent;
 
+import javax.annotation.Nullable;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static com.matt.forgehax.Helper.getLog;
+
 /**
  * Created on 7/18/2017 by fr1kin
  */
 @RegisterMod
 public class ScoreboardListenerService extends ServiceMod {
-  
+
   private final Setting<Integer> wait =
       getCommandStub()
           .builders()
@@ -47,15 +48,15 @@ public class ScoreboardListenerService extends ServiceMod {
           .description("Number of times to attempt retries on failure")
           .defaultTo(1)
           .build();
-  
+
   private final SimpleTimer timer = new SimpleTimer();
-  
+
   private boolean ignore = false;
-  
+
   public ScoreboardListenerService() {
     super("ScoreboardListenerService", "Listens for player joining and leaving");
   }
-  
+
   private void fireEvents(
       SPacketPlayerListItem.Action action, PlayerInfo info, GameProfile profile) {
     if (ignore || info == null) {
@@ -72,23 +73,23 @@ public class ScoreboardListenerService extends ServiceMod {
       }
     }
   }
-  
+
   @SubscribeEvent
   public void onClientConnect(FMLNetworkEvent.ClientConnectedToServerEvent event) {
     ignore = false;
   }
-  
+
   @SubscribeEvent
   public void onClientDisconnect(FMLNetworkEvent.ClientDisconnectionFromServerEvent event) {
     ignore = false;
   }
-  
+
   @SubscribeEvent
   public void onPacketIn(PacketEvent.Incoming.Pre event) {
     if (ignore && timer.isStarted() && timer.hasTimeElapsed(wait.get())) {
       ignore = false;
     }
-    
+
     if (!ignore && event.getPacket() instanceof SPacketCustomPayload) {
       ignore = true;
       timer.start();
@@ -97,7 +98,7 @@ public class ScoreboardListenerService extends ServiceMod {
       timer.reset();
     }
   }
-  
+
   @SubscribeEvent
   public void onScoreboardEvent(PacketEvent.Incoming.Pre event) {
     if (event.getPacket() instanceof SPacketPlayerListItem) {
@@ -106,7 +107,7 @@ public class ScoreboardListenerService extends ServiceMod {
           && !Action.REMOVE_PLAYER.equals(packet.getAction())) {
         return;
       }
-      
+
       packet
           .getEntries()
           .stream()
@@ -128,7 +129,7 @@ public class ScoreboardListenerService extends ServiceMod {
                       public void onSuccess(@Nullable PlayerInfo result) {
                         fireEvents(packet.getAction(), result, data.getProfile());
                       }
-                      
+
                       @Override
                       public void onFailure(Throwable t) {
                         if (retries.getAndDecrement() > 0) {
@@ -148,7 +149,8 @@ public class ScoreboardListenerService extends ServiceMod {
                           PlayerInfoHelper.generateOfflineWithCallback(name, this);
                         }
                       }
-                    });
+                    }
+                );
               });
     }
   }

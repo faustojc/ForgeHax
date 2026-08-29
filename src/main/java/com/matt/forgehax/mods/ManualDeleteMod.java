@@ -1,8 +1,5 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getLocalPlayer;
-import static com.matt.forgehax.Helper.getWorld;
-
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
@@ -11,20 +8,25 @@ import net.minecraftforge.client.event.MouseEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import org.lwjgl.input.Mouse;
 
+import static com.matt.forgehax.Helper.getLocalPlayer;
+import static com.matt.forgehax.Helper.getWorld;
+
 @RegisterMod
 public class ManualDeleteMod extends ToggleMod {
-  
+
   public ManualDeleteMod() {
-    super(Category.WORLD, "ManualEntityDelete", false,
-        "Manually delete entities with middle click");
+    super(
+        Category.WORLD, "ManualEntityDelete", false,
+        "Manually delete entities with middle click"
+    );
   }
-  
+
   @SubscribeEvent
   public void onInput(MouseEvent event) {
     if (getWorld() == null || getLocalPlayer() == null) {
       return;
     }
-    
+
     if (event.getButton() == 2 && Mouse.getEventButtonState()) { // on middle click
       RayTraceResult aim = MC.objectMouseOver;
       if (aim == null) {

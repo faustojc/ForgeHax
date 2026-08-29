@@ -1,12 +1,5 @@
 package com.matt.forgehax.mods;
 
-import static com.matt.forgehax.Helper.getLocalPlayer;
-import static com.matt.forgehax.Helper.getModManager;
-import static com.matt.forgehax.Helper.getRidingEntity;
-import static com.matt.forgehax.Helper.getWorld;
-import static com.matt.forgehax.util.entity.EntityUtils.isAboveWater;
-import static com.matt.forgehax.util.entity.EntityUtils.isInWater;
-
 import com.matt.forgehax.asm.events.AddCollisionBoxToListEvent;
 import com.matt.forgehax.asm.events.PacketEvent;
 import com.matt.forgehax.asm.reflection.FastReflection;
@@ -25,19 +18,48 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
+import static com.matt.forgehax.Helper.*;
+import static com.matt.forgehax.util.entity.EntityUtils.isAboveWater;
+import static com.matt.forgehax.util.entity.EntityUtils.isInWater;
+
 /**
  * Created by Babbaj on 8/29/2017.
  */
 @RegisterMod
 public class Jesus extends ToggleMod {
-  
+
   private static final AxisAlignedBB WATER_WALK_AA =
       new AxisAlignedBB(0.D, 0.D, 0.D, 1.D, 0.99D, 1.D);
-  
+
   public Jesus() {
     super(Category.PLAYER, "Jesus", false, "Walk on water");
   }
-  
+
+  @SuppressWarnings("deprecation")
+  private static boolean isAboveLand(Entity entity) {
+    if (entity == null) {
+      return false;
+    }
+
+    double y = entity.posY - 0.01;
+
+    for (int x = MathHelper.floor(entity.posX); x < MathHelper.ceil(entity.posX); x++) {
+      for (int z = MathHelper.floor(entity.posZ); z < MathHelper.ceil(entity.posZ); z++) {
+        BlockPos pos = new BlockPos(x, MathHelper.floor(y), z);
+
+        if (getWorld().getBlockState(pos).getBlock().isFullBlock(getWorld().getBlockState(pos))) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  private static boolean isAboveBlock(Entity entity, BlockPos pos) {
+    return entity.posY >= pos.getY();
+  }
+
   @SubscribeEvent
   public void onLocalPlayerUpdate(LocalPlayerUpdateEvent event) {
     if (!getModManager().get(FreecamMod.class).map(BaseMod::isEnabled).orElse(false)) {
@@ -50,7 +72,7 @@ public class Jesus extends ToggleMod {
       }
     }
   }
-  
+
   @SubscribeEvent
   public void onAddCollisionBox(AddCollisionBoxToListEvent event) {
     if (getLocalPlayer() != null
@@ -71,7 +93,7 @@ public class Jesus extends ToggleMod {
       event.setCanceled(true);
     }
   }
-  
+
   @SubscribeEvent
   public void onPacketSending(PacketEvent.Outgoing.Pre event) {
     if (event.getPacket() instanceof CPacketPlayer) {
@@ -85,30 +107,5 @@ public class Jesus extends ToggleMod {
         }
       }
     }
-  }
-  
-  @SuppressWarnings("deprecation")
-  private static boolean isAboveLand(Entity entity) {
-    if (entity == null) {
-      return false;
-    }
-    
-    double y = entity.posY - 0.01;
-    
-    for (int x = MathHelper.floor(entity.posX); x < MathHelper.ceil(entity.posX); x++) {
-      for (int z = MathHelper.floor(entity.posZ); z < MathHelper.ceil(entity.posZ); z++) {
-        BlockPos pos = new BlockPos(x, MathHelper.floor(y), z);
-        
-        if (getWorld().getBlockState(pos).getBlock().isFullBlock(getWorld().getBlockState(pos))) {
-          return true;
-        }
-      }
-    }
-    
-    return false;
-  }
-  
-  private static boolean isAboveBlock(Entity entity, BlockPos pos) {
-    return entity.posY >= pos.getY();
   }
 }
