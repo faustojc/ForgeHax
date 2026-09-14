@@ -1,8 +1,8 @@
 package com.matt.forgehax.asm.events;
 
-import net.minecraft.network.Packet;
-import net.minecraftforge.fml.common.eventhandler.Cancelable;
-import net.minecraftforge.fml.common.eventhandler.Event;
+import net.minecraft.network.protocol.Packet;
+import net.minecraftforge.eventbus.api.Cancelable;
+import net.minecraftforge.eventbus.api.Event;
 
 public class PacketEvent extends Event {
 

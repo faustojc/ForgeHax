@@ -4,12 +4,12 @@ import com.matt.forgehax.Globals;
 import com.matt.forgehax.util.entity.EntityUtils;
 import com.matt.forgehax.util.math.Angle;
 import com.matt.forgehax.util.math.AngleHelper;
-import net.minecraft.entity.Entity;
-import net.minecraft.inventory.ItemStackHelper;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NBTTagCompound;
-import net.minecraft.util.NonNullList;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.core.NonNullList;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.ContainerHelper;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.Collection;
 import java.util.List;
@@ -59,11 +59,11 @@ public class Utils implements Globals {
     return Math.max(min, Math.min(max, value));
   }
 
-  public static Angle getLookAtAngles(Vec3d start, Vec3d end) {
+  public static Angle getLookAtAngles(Vec3 start, Vec3 end) {
     return AngleHelper.getAngleFacingInDegrees(end.subtract(start)).normalize();
   }
 
-  public static Angle getLookAtAngles(Vec3d end) {
+  public static Angle getLookAtAngles(Vec3 end) {
     return getLookAtAngles(EntityUtils.getEyePos(getLocalPlayer()), end);
   }
 
@@ -86,12 +86,12 @@ public class Utils implements Globals {
 
   public static List<ItemStack> getShulkerContents(ItemStack stack) { // TODO: move somewhere else
     NonNullList<ItemStack> contents = NonNullList.withSize(27, ItemStack.EMPTY);
-    NBTTagCompound compound = stack.getTagCompound();
-    if (compound != null && compound.hasKey("BlockEntityTag", 10)) {
-      NBTTagCompound tags = compound.getCompoundTag("BlockEntityTag");
-      if (tags.hasKey("Items", 9)) {
+    CompoundTag compound = stack.getTag();
+    if (compound != null && compound.contains("BlockEntityTag", 10)) {
+      CompoundTag tags = compound.getCompound("BlockEntityTag");
+      if (tags.contains("Items", 9)) {
         // load in the items
-        ItemStackHelper.loadAllItems(tags, contents);
+        ContainerHelper.loadAllItems(tags, contents);
       }
     }
     return contents;

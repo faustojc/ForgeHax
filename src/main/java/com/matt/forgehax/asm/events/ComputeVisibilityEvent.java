@@ -1,15 +1,15 @@
 package com.matt.forgehax.asm.events;
 
-import net.minecraft.client.renderer.chunk.SetVisibility;
+import net.minecraft.client.renderer.chunk.VisibilitySet;
 import net.minecraft.client.renderer.chunk.VisGraph;
-import net.minecraftforge.fml.common.eventhandler.Event;
+import net.minecraftforge.eventbus.api.Event;
 
 public class ComputeVisibilityEvent extends Event {
 
   private final VisGraph visGraph;
-  private final SetVisibility setVisibility;
+  private final VisibilitySet setVisibility;
 
-  public ComputeVisibilityEvent(VisGraph visGraph, SetVisibility setVisibility) {
+  public ComputeVisibilityEvent(VisGraph visGraph, VisibilitySet setVisibility) {
     this.visGraph = visGraph;
     this.setVisibility = setVisibility;
   }
@@ -18,7 +18,7 @@ public class ComputeVisibilityEvent extends Event {
     return visGraph;
   }
 
-  public SetVisibility getSetVisibility() {
+  public VisibilitySet getSetVisibility() {
     return setVisibility;
   }
 }

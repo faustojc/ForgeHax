@@ -3,7 +3,7 @@ package com.matt.forgehax.util;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
-import net.minecraft.network.Packet;
+import net.minecraft.network.protocol.Packet;
 
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -15,26 +15,26 @@ import static com.matt.forgehax.Helper.getNetworkManager;
  */
 public class PacketHelper {
 
-  private static final LoadingCache<Packet, Boolean> CACHE =
+  private static final LoadingCache<Packet<?>, Boolean> CACHE =
       CacheBuilder.newBuilder()
                   .expireAfterWrite(15L, TimeUnit.SECONDS)
-                  .build(new CacheLoader<Packet, Boolean>() {
+                  .build(new CacheLoader<Packet<?>, Boolean>() {
                     @Override
-                    public Boolean load(Packet key) throws Exception {
+                    public Boolean load(Packet<?> key) throws Exception {
                       return false;
                     }
                   });
 
-  public static void ignore(Packet packet) {
+  public static void ignore(Packet<?> packet) {
     CACHE.put(packet, true);
   }
 
-  public static void ignoreAndSend(Packet packet) {
+  public static void ignoreAndSend(Packet<?> packet) {
     ignore(packet);
-    getNetworkManager().sendPacket(packet);
+    getNetworkManager().send(packet);
   }
 
-  public static boolean isIgnored(Packet packet) {
+  public static boolean isIgnored(Packet<?> packet) {
     try {
       return CACHE.get(packet);
     } catch (ExecutionException e) {
@@ -42,7 +42,7 @@ public class PacketHelper {
     }
   }
 
-  public static void remove(Packet packet) {
+  public static void remove(Packet<?> packet) {
     CACHE.invalidate(packet);
   }
 }

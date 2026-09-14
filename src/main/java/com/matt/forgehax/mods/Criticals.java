@@ -5,13 +5,15 @@ import com.matt.forgehax.asm.events.PlayerAttackEntityEvent;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.client.entity.EntityPlayerSP;
-import net.minecraft.init.MobEffects;
-import net.minecraft.network.NetworkManager;
-import net.minecraft.network.play.client.CPacketEntityAction;
-import net.minecraft.network.play.client.CPacketPlayer;
-import net.minecraft.network.play.client.CPacketUseEntity;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.Connection;
+import net.minecraft.network.protocol.game.ServerboundInteractPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import static com.matt.forgehax.Helper.getLocalPlayer;
 import static com.matt.forgehax.Helper.getNetworkManager;
@@ -27,48 +29,69 @@ public class Criticals extends ToggleMod {
 
   @SubscribeEvent
   public void onAttackEntity(PlayerAttackEntityEvent event) {
-    EntityPlayerSP player = getLocalPlayer();
-    NetworkManager networkManager = getNetworkManager();
+    LocalPlayer player = getLocalPlayer();
+    Connection networkManager = getNetworkManager();
 
     if (player == null
         || networkManager == null
         || event.getAttacker() != player
-        || !player.onGround
+        || !player.onGround()
         || player.isInWater()
         || player.isInLava()
-        || player.isOnLadder()
-        || player.isRiding()
-        || player.isPotionActive(MobEffects.BLINDNESS)) {
+        || player.onClimbable()
+        || player.isPassenger()
+        || player.hasEffect(MobEffects.BLINDNESS)) {
       return;
     }
 
     if (player.isSprinting()) {
-      networkManager.sendPacket(new CPacketEntityAction(player, CPacketEntityAction.Action.STOP_SPRINTING));
+      networkManager.send(new ServerboundPlayerCommandPacket(
+          player, ServerboundPlayerCommandPacket.Action.STOP_SPRINTING));
       restoreSprinting = true;
     }
 
-    networkManager.sendPacket(
-        new CPacketPlayer.Position(player.posX, player.posY + 0.0625D, player.posZ, false));
-    networkManager.sendPacket(
-        new CPacketPlayer.Position(player.posX, player.posY, player.posZ, false));
-    networkManager.sendPacket(
-        new CPacketPlayer.Position(player.posX, player.posY + 0.000011D, player.posZ, false));
-    networkManager.sendPacket(
-        new CPacketPlayer.Position(player.posX, player.posY, player.posZ, false));
+    networkManager.send(
+        new ServerboundMovePlayerPacket.Pos(player.getX(), player.getY() + 0.0625D, player.getZ(), false));
+    networkManager.send(
+        new ServerboundMovePlayerPacket.Pos(player.getX(), player.getY(), player.getZ(), false));
+    networkManager.send(
+        new ServerboundMovePlayerPacket.Pos(player.getX(), player.getY() + 0.000011D, player.getZ(), false));
+    networkManager.send(
+        new ServerboundMovePlayerPacket.Pos(player.getX(), player.getY(), player.getZ(), false));
   }
 
   @SubscribeEvent
   public void onPacketSent(PacketEvent.Outgoing.Post event) {
     if (restoreSprinting
-        && event.getPacket() instanceof CPacketUseEntity
-        && ((CPacketUseEntity) event.getPacket()).getAction() == CPacketUseEntity.Action.ATTACK
+        && event.getPacket() instanceof ServerboundInteractPacket
+        && isAttack((ServerboundInteractPacket) event.getPacket())
     ) {
       restoreSprinting = false;
-      EntityPlayerSP player = getLocalPlayer();
-      NetworkManager networkManager = getNetworkManager();
+      LocalPlayer player = getLocalPlayer();
+      Connection networkManager = getNetworkManager();
       if (player != null && networkManager != null) {
-        networkManager.sendPacket(new CPacketEntityAction(player, CPacketEntityAction.Action.START_SPRINTING));
+        networkManager.send(new ServerboundPlayerCommandPacket(
+            player, ServerboundPlayerCommandPacket.Action.START_SPRINTING));
       }
     }
+  }
+
+  private static boolean isAttack(ServerboundInteractPacket packet) {
+    final boolean[] attack = {false};
+    packet.dispatch(new ServerboundInteractPacket.Handler() {
+      @Override
+      public void onInteraction(InteractionHand hand) {
+      }
+
+      @Override
+      public void onInteraction(InteractionHand hand, Vec3 location) {
+      }
+
+      @Override
+      public void onAttack() {
+        attack[0] = true;
+      }
+    });
+    return attack[0];
   }
 }

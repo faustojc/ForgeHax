@@ -4,11 +4,11 @@ import com.google.common.collect.Sets;
 import com.matt.forgehax.util.SafeConverter;
 import com.matt.forgehax.util.blocks.exceptions.BadBlockEntryFormatException;
 import com.matt.forgehax.util.blocks.exceptions.BlockDoesNotExistException;
-import net.minecraft.block.Block;
-import net.minecraft.init.Blocks;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.NonNullList;
-import net.minecraft.util.ResourceLocation;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -18,41 +18,44 @@ import java.util.regex.Pattern;
 
 /**
  * Created on 5/18/2017 by fr1kin
+ *
+ * <p>1.20.1 has no metadata/sub-block model: each former metadata variant (e.g. wool colors)
+ * is now its own registered {@link Block}, and what varies within a single Block is its
+ * {@link BlockState}. "meta" here is repurposed as a global block-state id
+ * ({@link Block#getId(BlockState)}/{@link Block#stateById(int)}), with {@code -1} still meaning
+ * "no specific state / matches any state of this block".
  */
 public class BlockOptionHelper {
 
   public static boolean isAir(String name) {
-    return Objects.equals(Blocks.AIR.getRegistryName(), new ResourceLocation(name));
+    ResourceLocation location = ResourceLocation.tryParse(name);
+    return location != null && Objects.equals(BuiltInRegistries.BLOCK.getKey(Blocks.AIR), location);
   }
 
   public static boolean isAir(int id) {
     return id == 0;
   }
 
-  public static Collection<ItemStack> getAllBlocks(Block block) {
-    NonNullList<ItemStack> list = NonNullList.create();
-    if (block != null) {
-      block.getSubBlocks(null, list);
-    }
-    return Collections.unmodifiableCollection(list);
+  public static Collection<BlockState> getAllBlocks(Block block) {
+    return block != null
+        ? Collections.unmodifiableCollection(block.getStateDefinition().getPossibleStates())
+        : Collections.emptyList();
   }
 
   public static void getAllBlocksMatchingByUnlocalized(
       final Collection<BlockEntry> found, String regex) {
     final Pattern pattern = Pattern.compile(regex);
-    Block.REGISTRY.forEach(
-        block ->
-            getAllBlocks(block)
-                .forEach(
-                    stack -> {
-                      Matcher matcher = pattern.matcher(stack.getUnlocalizedName().toLowerCase());
-                      if (matcher.find()) {
-                        try {
-                          found.add(new BlockEntry(block, stack.getMetadata(), false));
-                        } catch (BlockDoesNotExistException e) {
-                        }
-                      }
-                    }));
+    BuiltInRegistries.BLOCK.forEach(
+        block -> {
+          ResourceLocation key = BuiltInRegistries.BLOCK.getKey(block);
+          Matcher matcher = pattern.matcher(key.getPath().toLowerCase());
+          if (matcher.find()) {
+            try {
+              found.add(new BlockEntry(block, -1, false));
+            } catch (BlockDoesNotExistException e) {
+            }
+          }
+        });
   }
 
   public static Collection<BlockEntry> getAllBlocksMatchingByUnlocalized(String regex) {
@@ -64,21 +67,17 @@ public class BlockOptionHelper {
   public static void getAllBlocksMatchingByLocalized(
       final Collection<BlockEntry> found, String regex) {
     final Pattern pattern = Pattern.compile(regex);
-    Block.REGISTRY.forEach(
-        block ->
-            getAllBlocks(block)
-                .forEach(
-                    stack -> {
-                      Matcher matcher =
-                          pattern.matcher(
-                              stack.getDisplayName().replaceAll(" ", "_").toLowerCase());
-                      if (matcher.find()) {
-                        try {
-                          found.add(new BlockEntry(block, stack.getMetadata(), false));
-                        } catch (BlockDoesNotExistException e) {
-                        }
-                      }
-                    }));
+    BuiltInRegistries.BLOCK.forEach(
+        block -> {
+          Matcher matcher =
+              pattern.matcher(block.getName().getString().replaceAll(" ", "_").toLowerCase());
+          if (matcher.find()) {
+            try {
+              found.add(new BlockEntry(block, -1, false));
+            } catch (BlockDoesNotExistException e) {
+            }
+          }
+        });
   }
 
   public static Collection<BlockEntry> getAllBlocksMatchingByLocalized(String regex) {
@@ -94,13 +93,12 @@ public class BlockOptionHelper {
     return map;
   }
 
-  public static boolean isValidMetadataValue(Block block, int meta) {
-    for (ItemStack stack : getAllBlocks(block)) {
-      if (stack.getMetadata() == meta) {
-        return true;
-      }
+  public static boolean isValidMetadataValue(Block block, int stateId) {
+    if (stateId < 0) {
+      return true; // -1 = no specific state requested
     }
-    return false;
+    BlockState state = Block.stateById(stateId);
+    return state != null && state.getBlock() == block;
   }
 
   public static BlockData fromUniqueName(String uniqueName)
@@ -111,7 +109,8 @@ public class BlockOptionHelper {
     }
     String name = split[0];
     int meta = SafeConverter.toInteger(split.length > 1 ? split[1] : -1, -1);
-    Block block = Block.getBlockFromName(name);
+    ResourceLocation location = ResourceLocation.tryParse(name);
+    Block block = location != null ? BuiltInRegistries.BLOCK.getOptional(location).orElse(null) : null;
     if (block == null) {
       throw new BlockDoesNotExistException(uniqueName + " is not a valid block");
     }
@@ -130,7 +129,7 @@ public class BlockOptionHelper {
       throw new BlockDoesNotExistException(
           String.format(
               "Attempted to create entry for block \"%s\" with a invalid meta id of \"%d\"",
-              block.getRegistryName().toString(), metadataId
+              BuiltInRegistries.BLOCK.getKey(block).toString(), metadataId
           ));
     }
   }

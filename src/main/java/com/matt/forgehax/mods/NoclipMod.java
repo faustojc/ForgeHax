@@ -4,8 +4,8 @@ import com.matt.forgehax.events.LocalPlayerUpdateEvent;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.entity.Entity;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraft.world.entity.Entity;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import static com.matt.forgehax.Helper.getRidingOrPlayer;
 
@@ -20,15 +20,15 @@ public class NoclipMod extends ToggleMod {
   public void onDisabled() {
     Entity local = getRidingOrPlayer();
     if (local != null) {
-      local.noClip = false;
+      local.noPhysics = false;
     }
   }
 
   @SubscribeEvent
   public void onLocalPlayerUpdate(LocalPlayerUpdateEvent event) {
     Entity local = getRidingOrPlayer();
-    local.noClip = true;
-    local.onGround = false;
+    local.noPhysics = true;
+    local.setOnGround(false);
     local.fallDistance = 0;
   }
 }

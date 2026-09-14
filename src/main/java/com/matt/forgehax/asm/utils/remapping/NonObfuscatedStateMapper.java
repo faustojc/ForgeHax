@@ -31,8 +31,8 @@ public class NonObfuscatedStateMapper implements IStateMapper {
   @Override
   public String getSrgMethodName(
       String parentClassName, String methodName, String methodDescriptor) {
-    return ObfuscatedStateMapper.getInstance()
-                                .getSrgMethodName(parentClassName, methodName, methodDescriptor);
+    // Official mappings: names are already the real ones, there is no SRG layer.
+    return null;
   }
 
   @Nullable
@@ -45,7 +45,8 @@ public class NonObfuscatedStateMapper implements IStateMapper {
   @Nullable
   @Override
   public String getSrgFieldName(String parentClassName, String fieldName) {
-    return ObfuscatedStateMapper.getInstance().getSrgFieldName(parentClassName, fieldName);
+    // Official mappings: names are already the real ones, there is no SRG layer.
+    return null;
   }
 
   @Nullable

@@ -1,7 +1,6 @@
 package com.matt.forgehax.gui.components;
 
-import net.minecraft.client.gui.ScaledResolution;
-import org.lwjgl.opengl.GL11;
+import net.minecraft.client.gui.GuiGraphics;
 
 /**
  * Scoped scissor helper for scaled Minecraft GUI coordinates.
@@ -15,49 +14,30 @@ public final class GuiScissor {
   private GuiScissor() {
   }
 
-  public static Clip begin(GuiRect rect, ScaledResolution resolution) {
-    if (resolution == null) {
-      throw new IllegalArgumentException("resolution");
+  public static Clip begin(GuiGraphics graphics, GuiRect rect) {
+    if (graphics == null) {
+      throw new IllegalArgumentException("graphics");
     }
-    return begin(
-        rect,
-        resolution.getScaledHeight(),
-        resolution.getScaleFactor()
-    );
-  }
-
-  public static Clip begin(GuiRect rect, int scaledScreenHeight, int scaleFactor) {
     if (rect == null) {
       throw new IllegalArgumentException("rect");
     }
-    int scale = Math.max(1, scaleFactor);
-    int physicalX = rect.getX() * scale;
-    int physicalY = (scaledScreenHeight - rect.getY() - rect.getHeight()) * scale;
-    int physicalWidth = rect.getWidth() * scale;
-    int physicalHeight = rect.getHeight() * scale;
-
-    GL11.glPushAttrib(GL11.GL_SCISSOR_BIT);
-    GL11.glEnable(GL11.GL_SCISSOR_TEST);
-    GL11.glScissor(
-        Math.max(0, physicalX),
-        Math.max(0, physicalY),
-        Math.max(0, physicalWidth),
-        Math.max(0, physicalHeight)
-    );
-    return new Clip();
+    graphics.enableScissor(rect.getX(), rect.getY(), rect.getRight(), rect.getBottom());
+    return new Clip(graphics);
   }
 
   public static final class Clip implements AutoCloseable {
+    private final GuiGraphics graphics;
     private boolean closed;
 
-    private Clip() {
+    private Clip(GuiGraphics graphics) {
+      this.graphics = graphics;
     }
 
     @Override
     public void close() {
       if (!closed) {
         closed = true;
-        GL11.glPopAttrib();
+        graphics.disableScissor();
       }
     }
   }

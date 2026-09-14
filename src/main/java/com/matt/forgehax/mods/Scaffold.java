@@ -1,6 +1,6 @@
 package com.matt.forgehax.mods;
 
-import com.matt.forgehax.asm.reflection.FastReflection.Fields;
+import com.matt.forgehax.mixin.accessor.MinecraftAccessor;
 import com.matt.forgehax.mods.managers.PositionRotationManager;
 import com.matt.forgehax.mods.managers.PositionRotationManager.RotationState.Local;
 import com.matt.forgehax.mods.services.HotbarSelectionService.ResetFunction;
@@ -17,15 +17,16 @@ import com.matt.forgehax.util.math.Angle;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.block.Block;
-import net.minecraft.item.ItemBlock;
-import net.minecraft.network.play.client.CPacketAnimation;
-import net.minecraft.network.play.client.CPacketEntityAction;
-import net.minecraft.network.play.client.CPacketEntityAction.Action;
-import net.minecraft.util.EnumFacing;
-import net.minecraft.util.EnumHand;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket.Action;
+import net.minecraft.network.protocol.game.ServerboundSwingPacket;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -37,8 +38,8 @@ import static com.matt.forgehax.Helper.*;
 @RegisterMod
 public class Scaffold extends ToggleMod implements PositionRotationManager.MovementUpdateListener {
 
-  private static final EnumSet<EnumFacing> NEIGHBORS =
-      EnumSet.of(EnumFacing.NORTH, EnumFacing.EAST, EnumFacing.SOUTH, EnumFacing.WEST);
+  private static final EnumSet<Direction> NEIGHBORS =
+      EnumSet.of(Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST);
 
   private int tickCount = 0;
   private boolean placing = false;
@@ -64,16 +65,16 @@ public class Scaffold extends ToggleMod implements PositionRotationManager.Movem
       ++tickCount;
     }
 
-    if (LocalPlayerUtils.getVelocity().normalize().lengthVector() > 1.D && placing) {
+    if (LocalPlayerUtils.getVelocity().normalize().length() > 1.D && placing) {
       state.setServerAngles(previousAngles);
     } else {
       placing = false;
       tickCount = 0;
     }
 
-    BlockPos below = new BlockPos(getLocalPlayer()).down();
+    BlockPos below = getLocalPlayer().blockPosition().below();
 
-    if (!getWorld().getBlockState(below).getMaterial().isReplaceable()) {
+    if (!getWorld().getBlockState(below).canBeReplaced()) {
       return;
     }
 
@@ -81,8 +82,11 @@ public class Scaffold extends ToggleMod implements PositionRotationManager.Movem
         LocalPlayerInventory.getHotbarInventory()
                             .stream()
                             .filter(InvItem::nonNull)
-                            .filter(item -> item.getItem() instanceof ItemBlock)
-                            .filter(item -> Block.getBlockFromItem(item.getItem()).getDefaultState().isFullBlock())
+                            .filter(item -> item.getItem() instanceof BlockItem)
+                            .filter(item -> Block.isShapeFullBlock(
+                                Block.byItem(item.getItem())
+                                     .defaultBlockState()
+                                     .getShape(getWorld(), BlockPos.ZERO)))
                             .max(Comparator.comparingInt(LocalPlayerInventory::getHotbarDistance))
                             .orElse(InvItem.EMPTY);
 
@@ -90,8 +94,8 @@ public class Scaffold extends ToggleMod implements PositionRotationManager.Movem
       return;
     }
 
-    final Vec3d eyes = EntityUtils.getEyePos(getLocalPlayer());
-    final Vec3d dir = LocalPlayerUtils.getViewAngles().getDirectionVector();
+    final Vec3 eyes = EntityUtils.getEyePos(getLocalPlayer());
+    final Vec3 dir = LocalPlayerUtils.getViewAngles().getDirectionVector();
 
     BlockTraceInfo trace =
         Optional.ofNullable(BlockHelper.getPlaceableBlockSideTrace(eyes, dir, below))
@@ -100,7 +104,7 @@ public class Scaffold extends ToggleMod implements PositionRotationManager.Movem
                     () ->
                         NEIGHBORS
                             .stream()
-                            .map(below::offset)
+                            .map(below::relative)
                             .filter(BlockHelper::isBlockReplaceable)
                             .map(bp -> BlockHelper.getPlaceableBlockSideTrace(eyes, dir, bp))
                             .filter(Objects::nonNull)
@@ -112,7 +116,7 @@ public class Scaffold extends ToggleMod implements PositionRotationManager.Movem
       return;
     }
 
-    Vec3d hit = trace.getHitVec();
+    Vec3 hit = trace.getHitVec();
     state.setServerAngles(previousAngles = Utils.getLookAtAngles(hit));
 
     final BlockTraceInfo tr = trace;
@@ -124,35 +128,33 @@ public class Scaffold extends ToggleMod implements PositionRotationManager.Movem
           if (sneak) {
             // send start sneaking packet
             PacketHelper.ignoreAndSend(
-                new CPacketEntityAction(getLocalPlayer(), Action.START_SNEAKING));
+                new ServerboundPlayerCommandPacket(getLocalPlayer(), Action.PRESS_SHIFT_KEY));
 
             LocalPlayerUtils.setSneaking(true);
             LocalPlayerUtils.setSneakingSuppression(true);
           }
 
           getPlayerController()
-              .processRightClickBlock(
+              .useItemOn(
                   getLocalPlayer(),
-                  getWorld(),
-                  tr.getPos(),
-                  tr.getOppositeSide(),
-                  hit,
-                  EnumHand.MAIN_HAND
+                  InteractionHand.MAIN_HAND,
+                  new BlockHitResult(hit, tr.getOppositeSide(), tr.getPos(), false)
               );
 
-          getNetworkManager().sendPacket(new CPacketAnimation(EnumHand.MAIN_HAND));
+          getNetworkManager().send(new ServerboundSwingPacket(InteractionHand.MAIN_HAND));
 
           if (sneak) {
             LocalPlayerUtils.setSneaking(false);
             LocalPlayerUtils.setSneakingSuppression(false);
 
             getNetworkManager()
-                .sendPacket(new CPacketEntityAction(getLocalPlayer(), Action.STOP_SNEAKING));
+                .send(new ServerboundPlayerCommandPacket(getLocalPlayer(), Action.RELEASE_SHIFT_KEY));
           }
 
           func.revert();
 
-          Fields.Minecraft_rightClickDelayTimer.set(MC, 4);
+          // the right-click delay moved off PlayerControllerMP onto Minecraft in modern MC
+          ((MinecraftAccessor) MC).setRightClickDelay(4);
           placing = true;
           tickCount = 0;
         });

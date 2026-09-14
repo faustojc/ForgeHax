@@ -1,15 +1,15 @@
 package com.matt.forgehax.util.schematica;
 
-import net.minecraft.block.state.IBlockState;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.state.BlockState;
 
 public interface Schematic {
 
-  default IBlockState desiredState(int x, int y, int z) {
+  default BlockState desiredState(int x, int y, int z) {
     return desiredState(new BlockPos(x, y, z));
   }
 
-  IBlockState desiredState(BlockPos pos);
+  BlockState desiredState(BlockPos pos);
 
   default boolean inSchematic(BlockPos pos) {
     return inSchematic(pos.getX(), pos.getY(), pos.getZ());

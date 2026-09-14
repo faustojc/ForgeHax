@@ -1,9 +1,8 @@
 package com.matt.forgehax.gui.components;
 
 import com.matt.forgehax.Globals;
-import com.matt.forgehax.util.draw.SurfaceHelper;
 import com.matt.forgehax.util.mod.BaseMod;
-import net.minecraft.client.gui.ScaledResolution;
+import net.minecraft.client.gui.GuiGraphics;
 
 import java.util.List;
 
@@ -132,15 +131,14 @@ public final class ModuleSidebar implements Globals {
   }
 
   /** Draws the sidebar and its clipped rows using the current GUI scale. */
-  public void draw(int mouseX, int mouseY) {
-    SurfaceHelper.drawRect(
-        bounds.getX(), bounds.getY(), bounds.getWidth(), bounds.getHeight(), GuiPalette.MODAL);
+  public void draw(GuiGraphics graphics, int mouseX, int mouseY) {
+    graphics.fill(
+        bounds.getX(), bounds.getY(), bounds.getRight(), bounds.getBottom(), GuiPalette.MODAL);
     if (bounds.getWidth() <= 0 || bounds.getHeight() <= 0) {
       return;
     }
     updateScrollExtent();
-    ScaledResolution resolution = new ScaledResolution(MC);
-    try (GuiScissor.Clip ignored = GuiScissor.begin(bounds, resolution)) {
+    try (GuiScissor.Clip ignored = GuiScissor.begin(graphics, bounds)) {
       List<BaseMod> visible = getVisibleModules();
       int firstY = bounds.getY() - scroll.getOffset();
       for (int i = 0; i < visible.size(); i++) {
@@ -149,30 +147,32 @@ public final class ModuleSidebar implements Globals {
         boolean hovered = bounds.contains(mouseX, mouseY) && mouseY >= y && mouseY < y + ROW_HEIGHT;
         boolean active = mod == selected;
         if (active) {
-          SurfaceHelper.drawRect(
-              bounds.getX(), y, bounds.getWidth(), ROW_HEIGHT, GuiPalette.SURFACE);
-          SurfaceHelper.drawRect(bounds.getX(), y, 2, ROW_HEIGHT, GuiPalette.ACCENT);
+          graphics.fill(
+              bounds.getX(), y, bounds.getRight(), y + ROW_HEIGHT, GuiPalette.SURFACE);
+          graphics.fill(bounds.getX(), y, bounds.getX() + 2, y + ROW_HEIGHT, GuiPalette.ACCENT);
         } else if (hovered) {
-          SurfaceHelper.drawRect(
-              bounds.getX(), y, bounds.getWidth(), ROW_HEIGHT, GuiPalette.HOVER);
+          graphics.fill(
+              bounds.getX(), y, bounds.getRight(), y + ROW_HEIGHT, GuiPalette.HOVER);
         }
         int dotColor = mod.isEnabled() ? GuiPalette.ACCENT : GuiPalette.DIVIDER;
-        SurfaceHelper.drawRect(
+        graphics.fill(
             bounds.getX() + ROW_PADDING,
             y + (ROW_HEIGHT - STATUS_DOT_SIZE) / 2,
-            STATUS_DOT_SIZE,
-            STATUS_DOT_SIZE,
+            bounds.getX() + ROW_PADDING + STATUS_DOT_SIZE,
+            y + (ROW_HEIGHT - STATUS_DOT_SIZE) / 2 + STATUS_DOT_SIZE,
             dotColor
         );
-        SurfaceHelper.drawText(
+        graphics.drawString(
+            MC.font,
             mod.getModName(),
             bounds.getX() + ROW_PADDING * 2,
-            y + (ROW_HEIGHT - SurfaceHelper.getTextHeight()) / 2,
+            y + (ROW_HEIGHT - MC.font.lineHeight) / 2,
             active ? GuiPalette.TEXT : GuiPalette.TEXT_MUTED
         );
       }
       if (visible.isEmpty()) {
-        SurfaceHelper.drawText(
+        graphics.drawString(
+            MC.font,
             "No modules match your search.",
             bounds.getX() + ROW_PADDING,
             bounds.getY() + ROW_PADDING,

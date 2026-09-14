@@ -20,9 +20,16 @@ as the name is changed.
  * Created by Hexeption on 18/12/2016.
  */
 
-import net.minecraft.client.renderer.GlStateManager;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.Tesselator;
+import com.mojang.blaze3d.vertex.VertexFormat;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import org.lwjgl.opengl.GL11;
+import org.joml.Matrix4f;
 
 import java.awt.*;
 import java.util.ArrayList;
@@ -95,21 +102,16 @@ public class MinecraftFontRenderer extends CFont {
     y = (y - 3.0D) * 2.0D;
 
     if (render) {
-      GL11.glPushMatrix();
-      GlStateManager.scale(0.5D, 0.5D, 0.5D);
-      GlStateManager.enableBlend();
-      GlStateManager.blendFunc(770, 771);
-      GlStateManager.color(
-          (color >> 16 & 0xFF) / 255.0F,
-          (color >> 8 & 0xFF) / 255.0F,
-          (color & 0xFF) / 255.0F,
-          alpha
-      );
-      int size = text.length();
-      GlStateManager.enableTexture2D();
-      GlStateManager.bindTexture(tex.getGlTextureId());
+      // 1.20.1: no more fixed-function glPushMatrix/glScale - use a throwaway local PoseStack
+      // scaled the same way the old code scaled its immediate-mode vertices.
+      PoseStack poseStack = new PoseStack();
+      poseStack.pushPose();
+      poseStack.scale(0.5F, 0.5F, 0.5F);
 
-      GL11.glBindTexture(GL11.GL_TEXTURE_2D, tex.getGlTextureId());
+      int drawColor = (color & 0xFFFFFF) | ((int) (alpha * 255.0F) << 24);
+      DynamicTexture currentTexture = tex;
+
+      int size = text.length();
 
       for (int i = 0; i < size; i++) {
         char character = text.charAt(i);
@@ -129,9 +131,7 @@ public class MinecraftFontRenderer extends CFont {
             randomCase = false;
             underline = false;
             strikethrough = false;
-            GlStateManager.bindTexture(tex.getGlTextureId());
-            // GL11.glBindTexture(GL11.GL_TEXTURE_2D,
-            // tex.getGlTextureId());
+            currentTexture = tex;
             currentData = this.charData;
 
             if ((colorIndex < 0) || (colorIndex > 15)) {
@@ -143,26 +143,17 @@ public class MinecraftFontRenderer extends CFont {
             }
 
             int colorcode = this.colorCode[colorIndex];
-            GlStateManager.color(
-                (colorcode >> 16 & 0xFF) / 255.0F,
-                (colorcode >> 8 & 0xFF) / 255.0F,
-                (colorcode & 0xFF) / 255.0F,
-                alpha
-            );
+            drawColor = (colorcode & 0xFFFFFF) | ((int) (alpha * 255.0F) << 24);
           } else if (colorIndex == 16) {
             randomCase = true;
           } else if (colorIndex == 17) {
             bold = true;
 
             if (italic) {
-              GlStateManager.bindTexture(texItalicBold.getGlTextureId());
-              // GL11.glBindTexture(GL11.GL_TEXTURE_2D,
-              // texItalicBold.getGlTextureId());
+              currentTexture = texItalicBold;
               currentData = this.boldItalicChars;
             } else {
-              GlStateManager.bindTexture(texBold.getGlTextureId());
-              // GL11.glBindTexture(GL11.GL_TEXTURE_2D,
-              // texBold.getGlTextureId());
+              currentTexture = texBold;
               currentData = this.boldChars;
             }
           } else if (colorIndex == 18) {
@@ -173,14 +164,10 @@ public class MinecraftFontRenderer extends CFont {
             italic = true;
 
             if (bold) {
-              GlStateManager.bindTexture(texItalicBold.getGlTextureId());
-              // GL11.glBindTexture(GL11.GL_TEXTURE_2D,
-              // texItalicBold.getGlTextureId());
+              currentTexture = texItalicBold;
               currentData = this.boldItalicChars;
             } else {
-              GlStateManager.bindTexture(texItalic.getGlTextureId());
-              // GL11.glBindTexture(GL11.GL_TEXTURE_2D,
-              // texItalic.getGlTextureId());
+              currentTexture = texItalic;
               currentData = this.italicChars;
             }
           } else if (colorIndex == 21) {
@@ -189,41 +176,36 @@ public class MinecraftFontRenderer extends CFont {
             randomCase = false;
             underline = false;
             strikethrough = false;
-            GlStateManager.color(
-                (color >> 16 & 0xFF) / 255.0F,
-                (color >> 8 & 0xFF) / 255.0F,
-                (color & 0xFF) / 255.0F,
-                alpha
-            );
-            GlStateManager.bindTexture(tex.getGlTextureId());
-            // GL11.glBindTexture(GL11.GL_TEXTURE_2D,
-            // tex.getGlTextureId());
+            drawColor = (color & 0xFFFFFF) | ((int) (alpha * 255.0F) << 24);
+            currentTexture = tex;
             currentData = this.charData;
           }
 
           i++;
         } else if ((character < currentData.length) && (character >= 0)) {
-          GL11.glBegin(GL11.GL_TRIANGLES);
-          drawChar(currentData, character, (float) x, (float) y);
-          GL11.glEnd();
+          drawChar(poseStack, currentTexture, currentData, character, (float) x, (float) y, drawColor);
 
           if (strikethrough) {
             drawLine(
+                poseStack,
                 x,
                 y + currentData[character].height / 2,
                 x + currentData[character].width - 8.0D,
                 y + currentData[character].height / 2,
-                1.0F
+                1.0F,
+                drawColor
             );
           }
 
           if (underline) {
             drawLine(
+                poseStack,
                 x,
                 y + currentData[character].height - 2.0D,
                 x + currentData[character].width - 8.0D,
                 y + currentData[character].height - 2.0D,
-                1.0F
+                1.0F,
+                drawColor
             );
           }
 
@@ -231,8 +213,7 @@ public class MinecraftFontRenderer extends CFont {
         }
       }
 
-      GL11.glHint(GL11.GL_POLYGON_SMOOTH_HINT, GL11.GL_DONT_CARE);
-      GL11.glPopMatrix();
+      poseStack.popPose();
     }
 
     return (float) x / 2.0F;
@@ -317,14 +298,24 @@ public class MinecraftFontRenderer extends CFont {
             this.font.deriveFont(3), this.antiAlias, this.fractionalMetrics, this.boldItalicChars);
   }
 
-  private void drawLine(double x, double y, double x1, double y1, float width) {
-    GL11.glDisable(GL11.GL_TEXTURE_2D);
-    GL11.glLineWidth(width);
-    GL11.glBegin(GL11.GL_LINES);
-    GL11.glVertex2d(x, y);
-    GL11.glVertex2d(x1, y1);
-    GL11.glEnd();
-    GL11.glEnable(GL11.GL_TEXTURE_2D);
+  private void drawLine(
+      PoseStack poseStack, double x, double y, double x1, double y1, float width, int argb) {
+    float a = (argb >>> 24) / 255.f;
+    float r = (argb >> 16 & 0xFF) / 255.f;
+    float g = (argb >> 8 & 0xFF) / 255.f;
+    float b = (argb & 0xFF) / 255.f;
+
+    Matrix4f mat = poseStack.last().pose();
+    BufferBuilder builder = Tesselator.getInstance().getBuilder();
+    builder.begin(VertexFormat.Mode.DEBUG_LINES, DefaultVertexFormat.POSITION_COLOR);
+    builder.vertex(mat, (float) x, (float) y, 0).color(r, g, b, a).endVertex();
+    builder.vertex(mat, (float) x1, (float) y1, 0).color(r, g, b, a).endVertex();
+
+    RenderSystem.setShader(GameRenderer::getPositionColorShader);
+    RenderSystem.enableBlend();
+    RenderSystem.defaultBlendFunc();
+    RenderSystem.lineWidth(width);
+    BufferUploader.drawWithShader(builder.end());
   }
 
   public List<String> wrapWords(String text, double width) {

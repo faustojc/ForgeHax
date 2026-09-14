@@ -10,9 +10,9 @@ import com.matt.forgehax.util.mod.BaseMod;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.HudMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.client.gui.GuiChat;
-import net.minecraftforge.client.event.RenderGameOverlayEvent;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraftforge.client.event.RenderGuiEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -134,7 +134,7 @@ public class ActiveModList extends HudMod {
   }
 
   @SubscribeEvent
-  public void onRenderScreen(RenderGameOverlayEvent.Text event) {
+  public void onRenderScreen(RenderGuiEvent.Post event) {
     int align = alignment.get().ordinal();
 
     List<String> text = new ArrayList<>();
@@ -143,7 +143,7 @@ public class ActiveModList extends HudMod {
       text.add(generateTickRateText());
     }
 
-    if (MC.currentScreen instanceof GuiChat || MC.gameSettings.showDebugInfo) {
+    if (MC.screen instanceof ChatScreen || MC.options.renderDebug) {
       long enabledMods = getModManager()
           .getMods()
           .stream()
@@ -162,10 +162,15 @@ public class ActiveModList extends HudMod {
           .forEach(name -> text.add(AlignHelper.getFlowDirX2(align) == 1 ? ">" + name : name + "<"));
     }
 
-    SurfaceHelper.drawTextAlign(
-        text, getPosX(0), getPosY(0),
-        Colors.WHITE.toBuffer(), scale.get(), true, align
-    );
+    SurfaceHelper.setGraphics(event.getGuiGraphics());
+    try {
+      SurfaceHelper.drawTextAlign(
+          text, getPosX(0), getPosY(0),
+          Colors.WHITE.toBuffer(), scale.get(), true, align
+      );
+    } finally {
+      SurfaceHelper.setGraphics(null);
+    }
   }
 
   private enum SortMode {

@@ -3,7 +3,7 @@ package com.matt.forgehax.util.markers;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Queues;
 import com.matt.forgehax.Globals;
-import net.minecraft.client.renderer.Tessellator;
+import com.mojang.blaze3d.vertex.Tesselator;
 
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -12,7 +12,7 @@ import java.util.function.Supplier;
 /**
  * Created on 1/18/2018 by fr1kin
  */
-public class TessellatorCache<E extends Tessellator> implements Globals {
+public class TessellatorCache<E extends Tesselator> implements Globals {
 
   private final BlockingQueue<E> cache;
   private final List<E> originals;

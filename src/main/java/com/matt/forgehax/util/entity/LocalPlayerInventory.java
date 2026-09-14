@@ -4,15 +4,14 @@ import com.google.common.base.Predicates;
 import com.matt.forgehax.mods.services.HotbarSelectionService;
 import com.matt.forgehax.mods.services.HotbarSelectionService.ResetFunction;
 import com.matt.forgehax.util.entity.LocalPlayerInventory.InvItem.SlotWrapper;
-import net.minecraft.entity.player.InventoryPlayer;
-import net.minecraft.init.Items;
-import net.minecraft.inventory.ClickType;
-import net.minecraft.inventory.Container;
-import net.minecraft.inventory.Slot;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.network.play.client.CPacketClickWindow;
-import net.minecraft.network.play.client.CPacketHeldItemChange;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,30 +20,28 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.matt.forgehax.Helper.*;
-import static com.matt.forgehax.asm.reflection.FastReflection.Fields.PlayerControllerMP_currentPlayerItem;
-
 public class LocalPlayerInventory {
 
-  public static InventoryPlayer getInventory() {
-    return getLocalPlayer().inventory;
+  public static Inventory getInventory() {
+    return getLocalPlayer().getInventory();
   }
 
-  public static Container getContainer() {
-    return getLocalPlayer().inventoryContainer;
+  public static AbstractContainerMenu getContainer() {
+    return getLocalPlayer().inventoryMenu;
   }
 
-  public static Container getOpenContainer() {
-    return getLocalPlayer().openContainer;
+  public static AbstractContainerMenu getOpenContainer() {
+    return getLocalPlayer().containerMenu;
   }
 
   public static int getHotbarSize() {
-    return InventoryPlayer.getHotbarSize();
+    return Inventory.getSelectionSize();
   }
 
   public static List<InvItem> getMainInventory() {
     List<InvItem> out = new ArrayList<>();
     int next = 0;
-    for (ItemStack item : getInventory().mainInventory) {
+    for (ItemStack item : getInventory().items.subList(0, 36)) {
       out.add(new InvItem.Base(item, next));
       next++;
     }
@@ -53,9 +50,9 @@ public class LocalPlayerInventory {
 
   public static List<InvItem> getSlotInventory() {
     return getContainer()
-        .inventorySlots
+        .slots
         .stream()
-        .map(SlotWrapper::new)
+        .map(slot -> new SlotWrapper(getContainer(), slot))
         .collect(Collectors.toList());
   }
 
@@ -80,11 +77,11 @@ public class LocalPlayerInventory {
   }
 
   public static InvItem getMouseHeld() {
-    return newInvItem(getInventory().getItemStack(), -999);
+    return newInvItem(getOpenContainer().getCarried(), -999);
   }
 
   public static InvItem getSelected() {
-    return getMainInventory().get(getInventory().currentItem);
+    return getMainInventory().get(getInventory().selected);
   }
 
   public static ResetFunction setSelected(int index, boolean reset, Predicate<Long> condition) {
@@ -126,14 +123,13 @@ public class LocalPlayerInventory {
 
   public static void syncSelected() {
     int selected = getSelected().getIndex();
-    if (selected != PlayerControllerMP_currentPlayerItem.get(getPlayerController())) {
-      PlayerControllerMP_currentPlayerItem.set(getPlayerController(), selected);
-      getNetworkManager().sendPacket(new CPacketHeldItemChange(selected));
+    if (getLocalPlayer().connection != null) {
+      getLocalPlayer().connection.send(new ServerboundSetCarriedItemPacket(selected));
     }
   }
 
   public static InvItem getOffhand() {
-    return newInvItem(getLocalPlayer().getHeldItemOffhand(), 36);
+    return newInvItem(getLocalPlayer().getOffhandItem(), 36);
   }
 
   public static int getHotbarDistance(InvItem item) {
@@ -143,31 +139,23 @@ public class LocalPlayerInventory {
 
   public static void sendWindowClick(
       int slotIdIn, int usedButtonIn, ClickType modeIn, ItemStack clickedItemIn) {
-    getNetworkManager()
-        .sendPacket(
-            new CPacketClickWindow(
-                0,
-                slotIdIn,
-                usedButtonIn,
-                modeIn,
-                clickedItemIn,
-                getOpenContainer().getNextTransactionID(getInventory())
-            ));
+    if (getPlayerController() != null && getLocalPlayer() != null) {
+      getPlayerController().handleInventoryMouseClick(
+          getOpenContainer().containerId,
+          slotIdIn,
+          usedButtonIn,
+          modeIn,
+          getLocalPlayer()
+      );
+    }
   }
 
   public static ItemStack sendWindowClick(InvItem item, int usedButtonIn, ClickType modeIn) {
     if (item.getIndex() == -1) {
       throw new IllegalArgumentException();
     }
-    ItemStack ret;
-    sendWindowClick(
-        item.getSlotNumber(),
-        usedButtonIn,
-        modeIn,
-        ret =
-            getOpenContainer()
-                .slotClick(item.getSlotNumber(), usedButtonIn, modeIn, getLocalPlayer())
-    );
+    ItemStack ret = item.getItemStack();
+    sendWindowClick(item.getSlotNumber(), usedButtonIn, modeIn, ret);
     return ret;
   }
 
@@ -176,7 +164,7 @@ public class LocalPlayerInventory {
   }
 
   public static InvItem newInvItem(Slot slot) {
-    return new SlotWrapper(slot);
+    return new SlotWrapper(getOpenContainer(), slot);
   }
 
   public abstract static class InvItem implements Comparable<InvItem> {
@@ -238,11 +226,11 @@ public class LocalPlayerInventory {
     }
 
     public boolean isDamageable() {
-      return getItemStack().isItemStackDamageable();
+      return getItemStack().isDamageableItem();
     }
 
     public boolean isItemDamageable() {
-      return getItem().isDamageable();
+      return getItem().isDamageable(getItemStack());
     }
 
     public boolean isStackable() {
@@ -250,11 +238,11 @@ public class LocalPlayerInventory {
     }
 
     public int getDamage() {
-      return isDamageable() ? getItemStack().getItemDamage() : 0;
+      return isDamageable() ? getItemStack().getDamageValue() : 0;
     }
 
     public int getDurability() {
-      return isDamageable() ? (getItemStack().getMaxDamage() - getItemStack().getItemDamage()) : 0;
+      return isDamageable() ? (getItemStack().getMaxDamage() - getItemStack().getDamageValue()) : 0;
     }
 
     public int getStackCount() {
@@ -270,7 +258,7 @@ public class LocalPlayerInventory {
     }
 
     public boolean isItemsEqual(InvItem other) {
-      return getItemStack().isItemEqualIgnoreDurability(other.getItemStack());
+      return ItemStack.isSameItem(getItemStack(), other.getItemStack());
     }
 
     @Override
@@ -314,15 +302,17 @@ public class LocalPlayerInventory {
 
     protected static class SlotWrapper extends InvItem {
 
+      private final AbstractContainerMenu menu;
       private final Slot slot;
 
-      protected SlotWrapper(Slot slot) {
+      protected SlotWrapper(AbstractContainerMenu menu, Slot slot) {
+        this.menu = menu;
         this.slot = slot;
       }
 
       @Override
       public ItemStack getItemStack() {
-        return slot.getStack();
+      return slot.getItem();
       }
 
       @Override
@@ -334,7 +324,7 @@ public class LocalPlayerInventory {
 
       @Override
       public int getSlotNumber() {
-        return slot.slotNumber;
+        return menu.slots.indexOf(slot);
       }
     }
   }

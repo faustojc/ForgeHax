@@ -1,10 +1,10 @@
 package com.matt.forgehax.asm.events;
 
-import net.minecraft.client.renderer.BufferBuilder;
-import net.minecraft.client.renderer.chunk.RenderChunk;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
-import net.minecraftforge.fml.common.eventhandler.Event;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import net.minecraft.client.renderer.chunk.ChunkRenderDispatcher.RenderChunk;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.eventbus.api.Event;
 
 /**
  * Created on 5/5/2017 by fr1kin
@@ -13,11 +13,11 @@ public class PrePostBlockModelRenderEvent extends Event {
 
   private final RenderChunk renderChunk;
   private final BufferBuilder buffer;
-  private final Vec3d pos;
+  private final Vec3 pos;
   private final State state;
 
   public PrePostBlockModelRenderEvent(
-      RenderChunk renderChunk, BufferBuilder BufferBuilder, State state, Vec3d pos) {
+      RenderChunk renderChunk, BufferBuilder BufferBuilder, State state, Vec3 pos) {
     this.renderChunk = renderChunk;
     this.buffer = BufferBuilder;
     this.state = state;
@@ -26,7 +26,7 @@ public class PrePostBlockModelRenderEvent extends Event {
 
   public PrePostBlockModelRenderEvent(
       RenderChunk renderChunk, BufferBuilder BufferBuilder, State state, BlockPos pos) {
-    this(renderChunk, BufferBuilder, state, new Vec3d(pos.getX(), pos.getY(), pos.getZ()));
+    this(renderChunk, BufferBuilder, state, new Vec3(pos.getX(), pos.getY(), pos.getZ()));
   }
 
   public PrePostBlockModelRenderEvent(
@@ -37,7 +37,7 @@ public class PrePostBlockModelRenderEvent extends Event {
       float y,
       float z
   ) {
-    this(renderChunk, BufferBuilder, state, new Vec3d(x, y, z));
+    this(renderChunk, BufferBuilder, state, new Vec3(x, y, z));
   }
 
   public RenderChunk getRenderChunk() {
@@ -52,7 +52,7 @@ public class PrePostBlockModelRenderEvent extends Event {
     return state;
   }
 
-  public Vec3d getPos() {
+  public Vec3 getPos() {
     return pos;
   }
 

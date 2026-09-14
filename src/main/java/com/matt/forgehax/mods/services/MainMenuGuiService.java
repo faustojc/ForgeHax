@@ -4,24 +4,26 @@ import com.google.common.util.concurrent.AtomicDouble;
 import com.matt.forgehax.util.color.Colors;
 import com.matt.forgehax.util.mod.ServiceMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.client.gui.GuiButton;
-import net.minecraft.client.gui.GuiMainMenu;
-import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.gui.GuiTextField;
-import net.minecraft.util.math.MathHelper;
-import net.minecraftforge.client.event.GuiScreenEvent;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import org.lwjgl.input.Keyboard;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
+import net.minecraftforge.client.event.ScreenEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import org.lwjgl.glfw.GLFW;
 
 import javax.annotation.Nullable;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedList;
 import java.util.List;
 
-import static net.minecraft.util.text.TextFormatting.RED;
-import static org.lwjgl.input.Keyboard.*;
+import static net.minecraft.ChatFormatting.RED;
 
 /**
  * Created by Babbaj on 4/10/2018.
@@ -29,43 +31,36 @@ import static org.lwjgl.input.Keyboard.*;
 @RegisterMod
 public class MainMenuGuiService extends ServiceMod {
 
-  private GuiButton customButton;
-
   public MainMenuGuiService() {
     super("MainMenuGuiService");
   }
 
   @SubscribeEvent
-  public void onGui(GuiScreenEvent.InitGuiEvent.Post event) {
-    if (event.getGui() instanceof GuiMainMenu) {
-      GuiMainMenu gui = (GuiMainMenu) event.getGui();
+  public void onGui(ScreenEvent.Init.Post event) {
+    if (event.getScreen() instanceof TitleScreen) {
+      Screen gui = event.getScreen();
 
-      event
-          .getButtonList()
+      List<? extends GuiEventListener> children = gui.children();
+      children
           .stream()
-          .skip(4) // skip first 4 button
+          .filter(w -> w instanceof Button)
+          .skip(4) // skip first 4 buttons
           .forEach(
-              button -> {
-                button.y += 24;
+              w -> {
+                AbstractWidget widget = (AbstractWidget) w;
+                widget.setY(widget.getY() + 24);
               }); // lower the rest of the buttons to make room for ours
 
-      event
-          .getButtonList()
-          .add(
-              customButton =
-                  new GuiButton(
-                      666,
-                      gui.width / 2 - 100,
-                      gui.height / 4 + 48 + (24 * 3), // put button in 4th row
-                      "Command Input"
-                  ));
-    }
-  }
-
-  @SubscribeEvent
-  public void onActionPerformed(GuiScreenEvent.ActionPerformedEvent event) {
-    if (event.getButton() == customButton) {
-      MC.displayGuiScreen(new CommandInputGui());
+      Button customButton =
+          Button.builder(Component.literal("Command Input"), b -> MC.setScreen(new CommandInputGui()))
+              .bounds(
+                  gui.width / 2 - 100,
+                  gui.height / 4 + 48 + (24 * 3), // put button in 4th row
+                  200,
+                  20
+              )
+              .build();
+      event.addListener(customButton);
     }
   }
 
@@ -84,11 +79,10 @@ public class MainMenuGuiService extends ServiceMod {
     }
   }
 
-  public class CommandInputGui extends GuiScreen {
+  public class CommandInputGui extends Screen {
 
-    GuiButton backButton;
-    GuiTextField inputField;
-    GuiButton modeButton;
+    EditBox inputField;
+    Button modeButton;
     ClientMode mode = ClientMode.FORGEHAX;
     Deque<String> messageHistory = new LinkedList<>();
 
@@ -97,52 +91,30 @@ public class MainMenuGuiService extends ServiceMod {
     int sentHistoryCursor = 0;
     String historyBuffer = "";
 
-    @Override
-    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-      this.drawDefaultBackground();
-      drawRect(
-          2, this.height - 16, this.width - 104, this.height - 4, Integer.MIN_VALUE); // input field
-      drawRect(2, 2, this.width - 2, this.height - 38, 70 << 24); // messageHistory box
-      this.inputField.drawTextBox();
-      this.drawHistory();
-      super.drawScreen(mouseX, mouseY, partialTicks);
+    protected CommandInputGui() {
+      super(Component.literal("Command Input"));
     }
 
     @Override
-    protected void keyTyped(char typedChar, int keyCode) throws IOException {
-      if (keyCode == KEY_ESCAPE) {
-        this.mc.displayGuiScreen(null);
-      } else if (keyCode != KEY_RETURN && keyCode != KEY_NUMPADENTER) {
-        if (keyCode == KEY_UP) // up arrow
-        {
-          // older
-          String sent = getSentHistory(-1);
-          if (sent != null) {
-            inputField.setText(sent);
-          }
-        } else if (keyCode == KEY_DOWN) // down arrow
-        {
-          // newer
-          String sent = getSentHistory(1);
-          if (sent != null) {
-            inputField.setText(sent);
-          }
-        } else if (keyCode == KEY_PRIOR) {
-          // this.mc.ingameGUI.getChatGUI().scroll(this.mc.ingameGUI.getChatGUI().getLineCount() -
-          // 1);
-        } else if (keyCode == KEY_NEXT) {
-          // this.mc.ingameGUI.getChatGUI().scroll(-this.mc.ingameGUI.getChatGUI().getLineCount() +
-          // 1);
-        } else {
-          this.inputField.textboxKeyTyped(typedChar, keyCode);
-        }
-      } else // on enter
-      {
-        String str = this.inputField.getText().trim();
+    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
+      this.renderBackground(graphics);
+      graphics.fill(
+          2, this.height - 16, this.width - 104, this.height - 4, Integer.MIN_VALUE); // input field
+      graphics.fill(2, 2, this.width - 2, this.height - 38, 70 << 24); // messageHistory box
+      this.drawHistory(graphics);
+      super.render(graphics, mouseX, mouseY, partialTicks);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+      if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+        MC.setScreen(null);
+        return true;
+      } else if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+        String str = this.inputField.getValue().trim();
 
         if (!str.isEmpty()) {
-          // this.print("> " + str);
-          this.inputField.setText("");
+          this.inputField.setValue("");
           if (this.inputHistory.isEmpty()
               || !this.inputHistory.get(this.inputHistory.size() - 1).equals(str)) {
             this.inputHistory.add(str);
@@ -150,54 +122,63 @@ public class MainMenuGuiService extends ServiceMod {
           this.sentHistoryCursor = inputHistory.size();
           this.runCommand(str);
         }
-      }
-    }
-
-    @Override
-    protected void actionPerformed(GuiButton button) {
-      if (button == modeButton) {
-        if (mode.ordinal() == ClientMode.values().length - 1) {
-          mode = ClientMode.values()[0];
-        } else {
-          mode = ClientMode.values()[mode.ordinal() + 1];
+        return true;
+      } else if (keyCode == GLFW.GLFW_KEY_UP) {
+        // older
+        String sent = getSentHistory(-1);
+        if (sent != null) {
+          inputField.setValue(sent);
         }
+        return true;
+      } else if (keyCode == GLFW.GLFW_KEY_DOWN) {
+        // newer
+        String sent = getSentHistory(1);
+        if (sent != null) {
+          inputField.setValue(sent);
+        }
+        return true;
+      } else if (keyCode == GLFW.GLFW_KEY_PAGE_UP || keyCode == GLFW.GLFW_KEY_PAGE_DOWN) {
+        return true;
       }
-      if (button == backButton) {
-        MC.displayGuiScreen(null);
-      }
+      return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
-    public void initGui() {
-      Keyboard.enableRepeatEvents(true);
+    public void init() {
       this.inputField =
-          new GuiTextField(0, this.fontRenderer, 4, this.height - 12, this.width - 4, 12);
-      inputField.setMaxStringLength(Integer.MAX_VALUE);
-      this.inputField.setEnableBackgroundDrawing(false);
-      this.inputField.setFocused(true);
-      this.inputField.setCanLoseFocus(false);
+          new EditBox(this.font, 4, this.height - 12, this.width - 4, 12, Component.empty());
+      inputField.setMaxLength(Integer.MAX_VALUE);
+      inputField.setBordered(false);
+      inputField.setFocused(true);
+      inputField.setCanLoseFocus(false);
+      addRenderableWidget(inputField);
+      setInitialFocus(inputField);
 
-      this.buttonList.add(
-          modeButton =
-              new GuiButton(
-                  0, this.width - 100 - 2, this.height - 20 - 2, 100, 20, mode.getName()));
+      this.modeButton =
+          Button.builder(
+                  Component.literal(mode.getName()),
+                  b -> {
+                    if (mode.ordinal() == ClientMode.values().length - 1) {
+                      mode = ClientMode.values()[0];
+                    } else {
+                      mode = ClientMode.values()[mode.ordinal() + 1];
+                    }
+                    b.setMessage(Component.literal(mode.getName()));
+                  })
+              .bounds(this.width - 100 - 2, this.height - 20 - 2, 100, 20)
+              .build();
+      addRenderableWidget(modeButton);
     }
 
-    @Override
-    public void updateScreen() {
-      this.inputField.updateCursorCounter();
-      this.modeButton.displayString = mode.getName();
-    }
-
-    private void drawHistory() {
+    private void drawHistory(GuiGraphics graphics) {
       AtomicDouble offset = new AtomicDouble();
       messageHistory
           .stream()
           .limit(100)
           .forEach(
               str -> {
-                MC.fontRenderer.drawString(
-                    str, 5, (this.height - 50 - offset.intValue()), Colors.WHITE.toBuffer());
+                graphics.drawString(
+                    MC.font, str, 5, (this.height - 50 - offset.intValue()), Colors.WHITE.toBuffer());
                 offset.addAndGet(10);
               });
     }
@@ -206,14 +187,14 @@ public class MainMenuGuiService extends ServiceMod {
     private String getSentHistory(int offset) {
       int pos = this.sentHistoryCursor + offset;
       final int max = this.inputHistory.size();
-      pos = MathHelper.clamp(pos, 0, max);
+      pos = Mth.clamp(pos, 0, max);
       if (pos != sentHistoryCursor) {
         if (pos == max) {
           this.sentHistoryCursor = max;
           return this.historyBuffer;
         }
         if (this.sentHistoryCursor == max) {
-          this.historyBuffer = inputField.getText();
+          this.historyBuffer = inputField.getValue();
         }
         this.sentHistoryCursor = pos;
         return inputHistory.get(pos);
@@ -243,6 +224,11 @@ public class MainMenuGuiService extends ServiceMod {
       } catch (Throwable t) {
         print(RED + t.toString());
       }
+    }
+
+    @Override
+    public boolean isPauseScreen() {
+      return false;
     }
   }
 }

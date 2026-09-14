@@ -1,10 +1,10 @@
 package com.matt.forgehax.asm.events;
 
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.EnumFacing;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
-import net.minecraftforge.fml.common.eventhandler.Event;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.eventbus.api.Event;
 
 /**
  * Created by Babbaj on 9/20/2017.
@@ -13,10 +13,10 @@ public class SchematicaPlaceBlockEvent extends Event {
 
   private final ItemStack item;
   private final BlockPos pos;
-  private final Vec3d vec;
-  private final EnumFacing side;
+  private final Vec3 vec;
+  private final Direction side;
 
-  public SchematicaPlaceBlockEvent(ItemStack itemIn, BlockPos posIn, Vec3d vecIn, EnumFacing sideIn) {
+  public SchematicaPlaceBlockEvent(ItemStack itemIn, BlockPos posIn, Vec3 vecIn, Direction sideIn) {
     this.item = itemIn;
     this.pos = posIn;
     this.vec = vecIn;
@@ -31,11 +31,11 @@ public class SchematicaPlaceBlockEvent extends Event {
     return this.pos;
   }
 
-  public Vec3d getVec() {
+  public Vec3 getVec() {
     return this.vec;
   }
 
-  public EnumFacing getSide() {
+  public Direction getSide() {
     return this.side;
   }
 }

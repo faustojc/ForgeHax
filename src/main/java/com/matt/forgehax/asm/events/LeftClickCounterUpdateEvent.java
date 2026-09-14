@@ -1,9 +1,9 @@
 package com.matt.forgehax.asm.events;
 
-import com.matt.forgehax.asm.reflection.FastReflection;
+import com.matt.forgehax.mixin.accessor.MinecraftAccessor;
 import net.minecraft.client.Minecraft;
-import net.minecraftforge.fml.common.eventhandler.Cancelable;
-import net.minecraftforge.fml.common.eventhandler.Event;
+import net.minecraftforge.eventbus.api.Cancelable;
+import net.minecraftforge.eventbus.api.Event;
 
 @Cancelable
 public class LeftClickCounterUpdateEvent extends Event {
@@ -21,7 +21,7 @@ public class LeftClickCounterUpdateEvent extends Event {
   }
 
   public int getCurrentValue() {
-    return FastReflection.Fields.Minecraft_leftClickCounter.get(minecraft);
+    return ((MinecraftAccessor) minecraft).getMissTime();
   }
 
   public int getValue() {

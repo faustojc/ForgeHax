@@ -85,12 +85,12 @@ public class PlayerInfoHelper implements Globals {
     return MC.getConnection() == null
         ? Collections.emptyList()
         : MC.getConnection()
-            .getPlayerInfoMap()
+            .getOnlinePlayers()
             .stream()
             .map(
-                info -> {
-                  PlayerInfo pl = get(info.getGameProfile().getName());
-                  return pl == null ? offlineUser(info.getGameProfile().getName()) : pl;
+                (net.minecraft.client.multiplayer.PlayerInfo info) -> {
+                  PlayerInfo pl = get(info.getProfile().getName());
+                  return pl == null ? offlineUser(info.getProfile().getName()) : pl;
                 })
             .collect(Collectors.toList());
   }
@@ -123,10 +123,14 @@ public class PlayerInfoHelper implements Globals {
       final String name, final FutureCallback<PlayerInfo> callback) {
     PlayerInfo info = get(name);
     if (info == null) {
-      Futures.addCallback(EXECUTOR_SERVICE.submit(() -> PlayerInfoHelper.register(name)), callback);
+      Futures.addCallback(
+          EXECUTOR_SERVICE.submit(() -> PlayerInfoHelper.register(name)),
+          callback,
+          MoreExecutors.directExecutor()
+      );
       return true;
     } else {
-      Futures.addCallback(Futures.immediateFuture(info), callback);
+      Futures.addCallback(Futures.immediateFuture(info), callback, MoreExecutors.directExecutor());
       return false;
     }
   }
@@ -136,10 +140,14 @@ public class PlayerInfoHelper implements Globals {
       final UUID uuid, final FutureCallback<PlayerInfo> callback) {
     PlayerInfo info = get(uuid);
     if (info == null) {
-      Futures.addCallback(EXECUTOR_SERVICE.submit(() -> PlayerInfoHelper.register(uuid)), callback);
+      Futures.addCallback(
+          EXECUTOR_SERVICE.submit(() -> PlayerInfoHelper.register(uuid)),
+          callback,
+          MoreExecutors.directExecutor()
+      );
       return true;
     } else {
-      Futures.addCallback(Futures.immediateFuture(info), callback);
+      Futures.addCallback(Futures.immediateFuture(info), callback, MoreExecutors.directExecutor());
       return false;
     }
   }
@@ -167,7 +175,7 @@ public class PlayerInfoHelper implements Globals {
       final String name, final FutureCallback<PlayerInfo> callback) {
     ListenableFuture<PlayerInfo> future =
         Futures.immediateFuture(PlayerInfoHelper.offlineUser(name));
-    Futures.addCallback(future, callback);
+    Futures.addCallback(future, callback, MoreExecutors.directExecutor());
     return false;
   }
 

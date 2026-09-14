@@ -3,15 +3,14 @@ package com.matt.forgehax.mods.managers;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.matt.forgehax.asm.reflection.FastReflection;
 import com.matt.forgehax.util.AuthHelper;
 import com.matt.forgehax.util.FileManager;
 import com.matt.forgehax.util.SimpleTimer;
 import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.mod.ServiceMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.util.Session;
-import net.minecraft.util.text.TextFormatting;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.User;
 import org.apache.commons.lang3.RandomStringUtils;
 
 import java.io.File;
@@ -51,7 +50,7 @@ public class AccountManager extends ServiceMod {
           .min(0)
           .build();
   private final AuthHelper auth = new AuthHelper();
-  private final Session originalSession = FastReflection.Fields.Minecraft_session.get(MC);
+  private final User originalSession = MC.getUser();
   private final SimpleTimer mpwTimer = new SimpleTimer();
   public String logInResponse;
 
@@ -128,7 +127,7 @@ public class AccountManager extends ServiceMod {
 
     // TODO: make this happen on setting change/on printing somehow
     if (mode.get() == SecretKeyOptions.MASTERPASSWORD && masterPassword == null) {
-      String append = TextFormatting.GOLD + " [requires master password first]";
+      String append = ChatFormatting.GOLD + " [requires master password first]";
       loginBuilder.append(append);
       saveBuilder.append(append);
     }
@@ -336,9 +335,9 @@ public class AccountManager extends ServiceMod {
         .description("Switch back to the original session.")
         .processor(
             data -> {
-              String getSessionUsername = FastReflection.Fields.Minecraft_session.get(MC).getUsername();
+              String getSessionUsername = MC.getUser().getName();
 
-              if (!getSessionUsername.equals(originalSession.getUsername())) {
+              if (!getSessionUsername.equals(originalSession.getName())) {
                 auth.setSession(originalSession);
                 printInform("Successfully switched to the original session.");
               } else printMessage("Session didn't change.");
@@ -405,7 +404,7 @@ public class AccountManager extends ServiceMod {
         .newCommandBuilder()
         .name("whoami")
         .description("Prints the name of the account you're currently using.")
-        .processor(data -> printInform("Currently logged in as: %s.", FastReflection.Fields.Minecraft_session.get(MC).getUsername()))
+        .processor(data -> printInform("Currently logged in as: %s.", MC.getUser().getName()))
         .build();
 
 
@@ -465,7 +464,7 @@ public class AccountManager extends ServiceMod {
           // Sets new session with the new credentials
           try {
             auth.newLogin(email, password);
-            logInResponse = String.format("Successfully logged in as \"%s\".", FastReflection.Fields.Minecraft_session.get(MC).getUsername());
+            logInResponse = String.format("Successfully logged in as \"%s\".", MC.getUser().getName());
             printInform(logInResponse);
           } catch (Exception e) {
             logInResponse = String.format("Could not login as \"%s\". The exception is: %s.", name, e.getMessage());

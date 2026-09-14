@@ -1,8 +1,5 @@
 package com.matt.forgehax.util.classloader;
 
-import net.minecraft.launchwrapper.Launch;
-import net.minecraft.launchwrapper.LaunchClassLoader;
-
 import javax.annotation.Nullable;
 import java.io.IOException;
 import java.lang.annotation.Annotation;
@@ -23,8 +20,8 @@ public abstract class AbstractClassLoader<E> {
   protected AbstractClassLoader() {
   }
 
-  public static LaunchClassLoader getFMLClassLoader() {
-    return Launch.classLoader;
+  public static ClassLoader getFMLClassLoader() {
+    return Thread.currentThread().getContextClassLoader();
   }
 
   /**
@@ -95,16 +92,14 @@ public abstract class AbstractClassLoader<E> {
              | IllegalAccessException
              | InvocationTargetException
              | NoSuchMethodException e) {
-      getLog()
-          .error(
-              "Failed to initialize class "
-                  + clazz.getSimpleName()
-                  + ": "
-                  + e.getClass().getSimpleName()
-                  + " - "
-                  + e.getMessage()
-                  + " - caused by: "
-                  + e.getCause());
+      getLog().error(
+          "Failed to initialize class {}: {} - {} - caused by: {}",
+          clazz.getSimpleName(),
+          e.getClass().getSimpleName(),
+          e.getMessage(),
+          e.getCause()
+      );
+      
       e.printStackTrace();
       return null;
     }

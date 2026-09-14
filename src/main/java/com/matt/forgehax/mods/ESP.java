@@ -15,17 +15,18 @@ import com.matt.forgehax.util.math.VectorUtils;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.entity.EntityLivingBase;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
-import net.minecraftforge.client.event.RenderLivingEvent;
-import net.minecraftforge.fml.common.eventhandler.EventPriority;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.client.event.RenderNameTagEvent;
+import net.minecraftforge.eventbus.api.EventPriority;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 
 import static com.matt.forgehax.Helper.getLocalPlayer;
 import static com.matt.forgehax.Helper.getWorld;
@@ -59,7 +60,7 @@ public class ESP extends ToggleMod implements Fonts {
           .description("Enables friendly mobs")
           .defaultTo(DrawOptions.NAME)
           .build();
-  private final List<EntityLivingBase> renderEntities = new ArrayList<>();
+  private final List<LivingEntity> renderEntities = new ArrayList<>();
 
   public ESP() {
     super(Category.RENDER, "ESP", false, "Shows entity locations and info");
@@ -68,13 +69,13 @@ public class ESP extends ToggleMod implements Fonts {
   @SubscribeEvent
   public void onUpdate(LocalPlayerUpdateEvent event) {
     renderEntities.clear();
-    for (net.minecraft.entity.Entity entity : getWorld().loadedEntityList) {
+    for (net.minecraft.world.entity.Entity entity : getWorld().entitiesForRendering()) {
       if (EntityUtils.isLiving(entity)
           && !Objects.equals(getLocalPlayer(), entity)
           && !EntityUtils.isFakeLocalPlayer(entity)
           && EntityUtils.isAlive(entity)
           && EntityUtils.isValidEntity(entity)) {
-        renderEntities.add((EntityLivingBase) entity);
+        renderEntities.add((LivingEntity) entity);
       }
     }
   }
@@ -85,15 +86,15 @@ public class ESP extends ToggleMod implements Fonts {
   }
 
   @SubscribeEvent
-  public void onRenderPlayerNameTag(RenderLivingEvent.Specials.Pre event) {
+  public void onRenderPlayerNameTag(RenderNameTagEvent event) {
     if (EntityUtils.isPlayer(event.getEntity())) {
-      event.setCanceled(true);
+      event.setContent(Component.empty());
     }
   }
 
   @SubscribeEvent(priority = EventPriority.LOW)
   public void onRender2D(final Render2DEvent event) {
-    for (EntityLivingBase living : renderEntities) {
+    for (LivingEntity living : renderEntities) {
       final Setting<DrawOptions> setting;
 
       switch (EntityUtils.getRelationship(living)) {
@@ -116,9 +117,9 @@ public class ESP extends ToggleMod implements Fonts {
         continue;
       }
 
-      Vec3d bottomPos = EntityUtils.getInterpolatedPos(living, event.getPartialTicks());
-      Vec3d topPos =
-          bottomPos.addVector(0.D, living.getRenderBoundingBox().maxY - living.posY, 0.D);
+      Vec3 bottomPos = EntityUtils.getInterpolatedPos(living, event.getPartialTicks());
+      Vec3 topPos =
+          bottomPos.add(0.D, living.getBoundingBox().maxY - living.getY(), 0.D);
 
       Plane top = VectorUtils.toScreen(topPos);
       Plane bot = VectorUtils.toScreen(bottomPos);
@@ -176,7 +177,7 @@ public class ESP extends ToggleMod implements Fonts {
       @Override
       public double draw(
           SurfaceBuilder builder,
-          EntityLivingBase living,
+          LivingEntity living,
           double topX,
           double topY,
           double botX,
@@ -184,7 +185,7 @@ public class ESP extends ToggleMod implements Fonts {
           double width,
           double height
       ) {
-        String text = living.getDisplayName().getUnformattedText();
+        String text = living.getDisplayName().getString();
 
         double x = topX - ((double) builder.getFontWidth(text) / 2.D);
         double y = topY - (double) builder.getFontHeight() - 1.D;
@@ -216,7 +217,7 @@ public class ESP extends ToggleMod implements Fonts {
       @Override
       public double draw(
           SurfaceBuilder builder,
-          EntityLivingBase living,
+          LivingEntity living,
           double topX,
           double topY,
           double botX,
@@ -225,7 +226,7 @@ public class ESP extends ToggleMod implements Fonts {
           double height
       ) {
         float hp =
-            MathHelper.clamp(living.getHealth(), 0, living.getMaxHealth()) / living.getMaxHealth();
+            Mth.clamp(living.getHealth(), 0, living.getMaxHealth()) / living.getMaxHealth();
         double x = topX - (HEALTHBAR_WIDTH / 2);
         double y = topY - HEALTHBAR_HEIGHT - 2;
         int color =
@@ -270,7 +271,7 @@ public class ESP extends ToggleMod implements Fonts {
       @Override
       public double draw(
           SurfaceBuilder builder,
-          EntityLivingBase living,
+          LivingEntity living,
           double topX,
           double topY,
           double botX,
@@ -279,10 +280,11 @@ public class ESP extends ToggleMod implements Fonts {
           double height
       ) {
         List<ItemStack> items =
-            StreamSupport.stream(living.getEquipmentAndArmor().spliterator(), false)
-                         .filter(Objects::nonNull)
-                         .filter(stack -> !stack.isEmpty())
-                         .collect(Collectors.toList());
+            Arrays.stream(EquipmentSlot.values())
+                  .map(living::getItemBySlot)
+                  .filter(Objects::nonNull)
+                  .filter(stack -> !stack.isEmpty())
+                  .collect(Collectors.toList());
         if (!items.isEmpty()) { // only continue if there are elements present
           final double itemSize = 16;
           double x = topX - ((itemSize * (double) items.size()) / 2.D);
@@ -343,7 +345,7 @@ public class ESP extends ToggleMod implements Fonts {
      */
     double draw(
         SurfaceBuilder builder,
-        EntityLivingBase living,
+        LivingEntity living,
         double topX,
         double topY,
         double botX,

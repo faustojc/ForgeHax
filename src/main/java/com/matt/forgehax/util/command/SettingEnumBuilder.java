@@ -3,7 +3,7 @@ package com.matt.forgehax.util.command;
 import com.matt.forgehax.util.command.callbacks.OnChangeCallback;
 import com.matt.forgehax.util.typeconverter.TypeConverter;
 import com.matt.forgehax.util.typeconverter.TypeConverterRegistry;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.Mth;
 import org.apache.commons.lang3.StringUtils;
 
 import javax.annotation.Nullable;
@@ -71,7 +71,7 @@ public class SettingEnumBuilder<E extends Enum<E>>
                                  E[] values = type().getEnumConstants();
                                  try {
                                    int index = Integer.valueOf(value);
-                                   return values[MathHelper.clamp(index, 0, values.length - 1)];
+                                   return values[Mth.clamp(index, 0, values.length - 1)];
                                  } catch (NumberFormatException e) {
                                    return values[0];
                                  }

@@ -4,7 +4,7 @@ import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import com.matt.forgehax.util.color.Color;
 import com.matt.forgehax.util.color.Colors;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.Mth;
 
 import java.io.IOException;
 
@@ -53,10 +53,10 @@ public class ColorProperty implements IBlockProperty {
   }
 
   public void set(int r, int g, int b, int a) {
-    this.r = MathHelper.clamp(r, 0, 255);
-    this.g = MathHelper.clamp(g, 0, 255);
-    this.b = MathHelper.clamp(b, 0, 255);
-    this.a = MathHelper.clamp(a, 0, 255);
+    this.r = Mth.clamp(r, 0, 255);
+    this.g = Mth.clamp(g, 0, 255);
+    this.b = Mth.clamp(b, 0, 255);
+    this.a = Mth.clamp(a, 0, 255);
     this.buffer = Color.of(r, g, b, a).toBuffer();
   }
 

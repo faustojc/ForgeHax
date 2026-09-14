@@ -6,14 +6,16 @@ import com.matt.forgehax.util.entity.EntityUtils;
 import com.matt.forgehax.util.mod.ServiceMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
 import com.matt.forgehax.util.tesselation.GeometryTessellator;
-import net.minecraft.client.renderer.GlStateManager;
-import net.minecraft.util.math.Vec3d;
-import net.minecraftforge.client.event.RenderGameOverlayEvent;
-import net.minecraftforge.client.event.RenderWorldLastEvent;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.client.event.RenderGuiEvent;
+import net.minecraftforge.client.event.RenderLevelStageEvent;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.fml.common.eventhandler.EventPriority;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import org.lwjgl.opengl.GL11;
+import net.minecraftforge.eventbus.api.EventPriority;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import static com.matt.forgehax.Helper.getRenderEntity;
 
@@ -23,46 +25,34 @@ import static com.matt.forgehax.Helper.getRenderEntity;
 @RegisterMod
 public class RenderEventService extends ServiceMod {
 
-  private static final GeometryTessellator TESSELLATOR = new GeometryTessellator();
-
   public RenderEventService() {
     super("RenderEventService");
   }
 
   @SubscribeEvent
-  public void onRenderWorld(RenderWorldLastEvent event) {
-    GlStateManager.pushMatrix();
-    GlStateManager.disableTexture2D();
-    GlStateManager.enableBlend();
-    GlStateManager.disableAlpha();
-    GlStateManager.tryBlendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, 1, 0);
-    GlStateManager.shadeModel(GL11.GL_SMOOTH);
-    GlStateManager.disableDepth();
+  public void onRenderWorld(RenderLevelStageEvent event) {
+    if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_WEATHER) {
+      return;
+    }
 
-    GlStateManager.glLineWidth(1.f);
+    PoseStack poseStack = event.getPoseStack();
+    MultiBufferSource.BufferSource bufferSource = MC.renderBuffers().bufferSource();
+    VertexConsumer buffer = bufferSource.getBuffer(RenderType.lines());
 
-    Vec3d renderPos = EntityUtils.getInterpolatedPos(getRenderEntity(), event.getPartialTicks());
+    GeometryTessellator tessellator = new GeometryTessellator(poseStack, buffer);
+    Vec3 renderPos = EntityUtils.getInterpolatedPos(getRenderEntity(), event.getPartialTick());
 
-    RenderEvent e = new RenderEvent(TESSELLATOR, renderPos, event.getPartialTicks());
+    RenderEvent e = new RenderEvent(tessellator, renderPos, event.getPartialTick());
     e.resetTranslation();
     MinecraftForge.EVENT_BUS.post(e);
 
-    GlStateManager.glLineWidth(1.f);
-
-    GlStateManager.shadeModel(GL11.GL_FLAT);
-    GlStateManager.disableBlend();
-    GlStateManager.enableAlpha();
-    GlStateManager.enableTexture2D();
-    GlStateManager.enableDepth();
-    GlStateManager.enableCull();
-    GlStateManager.popMatrix();
+    bufferSource.endBatch(RenderType.lines());
   }
 
+  // RenderGuiEvent.Post fires once per frame after the whole HUD. RenderGuiOverlayEvent.Post
+  // fires once per registered overlay, which ran every 2D listener ~14 times a frame.
   @SubscribeEvent(priority = EventPriority.LOW)
-  public void onRenderGameOverlayEvent(final RenderGameOverlayEvent.Text event) {
-    if (event.getType().equals(RenderGameOverlayEvent.ElementType.TEXT)) {
-      MinecraftForge.EVENT_BUS.post(new Render2DEvent(event.getPartialTicks()));
-      GlStateManager.color(1.f, 1.f, 1.f, 1.f); // reset color
-    }
+  public void onRenderGuiOverlay(final RenderGuiEvent.Post event) {
+    MinecraftForge.EVENT_BUS.post(new Render2DEvent(event.getPartialTick()));
   }
 }

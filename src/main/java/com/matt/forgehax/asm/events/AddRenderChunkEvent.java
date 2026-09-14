@@ -1,8 +1,8 @@
 package com.matt.forgehax.asm.events;
 
-import net.minecraft.client.renderer.chunk.RenderChunk;
-import net.minecraft.util.BlockRenderLayer;
-import net.minecraftforge.fml.common.eventhandler.Event;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.chunk.ChunkRenderDispatcher.RenderChunk;
+import net.minecraftforge.eventbus.api.Event;
 
 /**
  * Created on 5/9/2017 by fr1kin
@@ -10,9 +10,9 @@ import net.minecraftforge.fml.common.eventhandler.Event;
 public class AddRenderChunkEvent extends Event {
 
   private final RenderChunk renderChunk;
-  private final BlockRenderLayer blockRenderLayer;
+  private final RenderType blockRenderLayer;
 
-  public AddRenderChunkEvent(RenderChunk renderChunk, BlockRenderLayer blockRenderLayer) {
+  public AddRenderChunkEvent(RenderChunk renderChunk, RenderType blockRenderLayer) {
     this.renderChunk = renderChunk;
     this.blockRenderLayer = blockRenderLayer;
   }
@@ -21,7 +21,7 @@ public class AddRenderChunkEvent extends Event {
     return renderChunk;
   }
 
-  public BlockRenderLayer getBlockRenderLayer() {
+  public RenderType getBlockRenderLayer() {
     return blockRenderLayer;
   }
 }

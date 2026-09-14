@@ -1,13 +1,13 @@
 package com.matt.forgehax.asm.events;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.state.IBlockState;
-import net.minecraft.entity.Entity;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.World;
-import net.minecraftforge.fml.common.eventhandler.Cancelable;
-import net.minecraftforge.fml.common.eventhandler.Event;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
+import net.minecraftforge.eventbus.api.Cancelable;
+import net.minecraftforge.eventbus.api.Event;
 
 import java.util.List;
 
@@ -18,21 +18,21 @@ import java.util.List;
 public class AddCollisionBoxToListEvent extends Event {
 
   private final Block block;
-  private final IBlockState state;
-  private final World world;
+  private final BlockState state;
+  private final Level world;
   private final BlockPos pos;
-  private final AxisAlignedBB entityBox;
-  private final List<AxisAlignedBB> collidingBoxes;
+  private final AABB entityBox;
+  private final List<AABB> collidingBoxes;
   private final Entity entity;
   private final boolean bool;
 
   public AddCollisionBoxToListEvent(
       Block block,
-      IBlockState state,
-      World worldIn,
+      BlockState state,
+      Level worldIn,
       BlockPos pos,
-      AxisAlignedBB entityBox,
-      List<AxisAlignedBB> collidingBoxes,
+      AABB entityBox,
+      List<AABB> collidingBoxes,
       Entity entityIn,
       boolean bool
   ) {
@@ -50,11 +50,11 @@ public class AddCollisionBoxToListEvent extends Event {
     return block;
   }
 
-  public IBlockState getState() {
+  public BlockState getState() {
     return state;
   }
 
-  public World getWorld() {
+  public Level getWorld() {
     return world;
   }
 
@@ -62,11 +62,11 @@ public class AddCollisionBoxToListEvent extends Event {
     return pos;
   }
 
-  public AxisAlignedBB getEntityBox() {
+  public AABB getEntityBox() {
     return entityBox;
   }
 
-  public List<AxisAlignedBB> getCollidingBoxes() {
+  public List<AABB> getCollidingBoxes() {
     return collidingBoxes;
   }
 

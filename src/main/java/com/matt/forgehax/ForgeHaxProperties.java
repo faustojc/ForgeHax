@@ -1,7 +1,5 @@
 package com.matt.forgehax;
 
-import com.google.common.base.Strings;
-
 import java.io.InputStream;
 import java.util.Properties;
 
@@ -33,27 +31,31 @@ public class ForgeHaxProperties {
   }
 
   public static String getVersion() {
-    return Strings.nullToEmpty(getConfigProperties().getProperty("forgehax.version"));
+    return value("forgehax.version");
   }
 
   public static String getMcVersion() {
-    return Strings.nullToEmpty(getConfigProperties().getProperty("forgehax.mc.version"));
+    return value("forgehax.mc.version");
   }
 
   public static String getForgeVersion() {
-    return Strings.nullToEmpty(getConfigProperties().getProperty("forgehax.forge.version"));
+    return value("forgehax.forge.version");
   }
 
   public static String getMcpVersion() {
-    return Strings.nullToEmpty(getConfigProperties().getProperty("forgehax.mcp.version"));
+    return value("forgehax.mcp.version");
   }
 
   public static String getMcpChannel() {
-    return Strings.nullToEmpty(getConfigProperties().getProperty("forgehax.mcp.channel"));
+    return value("forgehax.mcp.channel");
   }
 
   public static String getMcpMapping() {
-    return Strings.nullToEmpty(getConfigProperties().getProperty("forgehax.mcp.mapping"));
+    return value("forgehax.mcp.mapping");
+  }
+
+  private static String value(String key) {
+    return CONFIG_PROPERTIES.getProperty(key, "");
   }
 
   public static String getMcpMappingUrl() {

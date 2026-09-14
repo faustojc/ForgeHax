@@ -6,7 +6,7 @@ import com.matt.forgehax.util.key.Bindings;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import static com.matt.forgehax.Helper.getLocalPlayer;
 
@@ -30,7 +30,7 @@ public class AutoSprintMod extends ToggleMod {
   private void startSprinting() {
     switch (mode.get()) {
       case ALWAYS:
-        if (!getLocalPlayer().collidedHorizontally && !getLocalPlayer().isSprinting()) {
+        if (!getLocalPlayer().horizontalCollision && !getLocalPlayer().isSprinting()) {
           getLocalPlayer().setSprinting(true);
         }
         break;
@@ -40,7 +40,7 @@ public class AutoSprintMod extends ToggleMod {
           Bindings.sprint.bind();
           isBound = true;
         }
-        if (!Bindings.sprint.getBinding().isKeyDown()) {
+        if (!Bindings.sprint.isPressed()) {
           Bindings.sprint.setPressed(true);
         }
         break;
@@ -68,9 +68,9 @@ public class AutoSprintMod extends ToggleMod {
    */
   @SubscribeEvent
   public void onUpdate(LocalPlayerUpdateEvent event) {
-    if (event.getEntityLiving().moveForward > 0
-        && !event.getEntityLiving().collidedHorizontally
-        && !event.getEntityLiving().isSneaking()) {
+    if (event.getEntity().zza > 0
+        && !event.getEntity().horizontalCollision
+        && !event.getEntity().isShiftKeyDown()) {
       startSprinting();
     }
   }

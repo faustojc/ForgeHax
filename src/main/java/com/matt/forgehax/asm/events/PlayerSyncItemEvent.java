@@ -1,17 +1,17 @@
 package com.matt.forgehax.asm.events;
 
-import net.minecraft.client.multiplayer.PlayerControllerMP;
-import net.minecraftforge.fml.common.eventhandler.Event;
+import net.minecraft.client.multiplayer.MultiPlayerGameMode;
+import net.minecraftforge.eventbus.api.Event;
 
 public class PlayerSyncItemEvent extends Event {
 
-  private final PlayerControllerMP playerController;
+  private final MultiPlayerGameMode playerController;
 
-  public PlayerSyncItemEvent(PlayerControllerMP playerController) {
+  public PlayerSyncItemEvent(MultiPlayerGameMode playerController) {
     this.playerController = playerController;
   }
 
-  public PlayerControllerMP getPlayerController() {
+  public MultiPlayerGameMode getPlayerController() {
     return playerController;
   }
 }

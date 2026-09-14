@@ -1,17 +1,17 @@
 package com.matt.forgehax.asm.events;
 
-import net.minecraft.entity.Entity;
-import net.minecraft.util.math.Vec3d;
-import net.minecraftforge.fml.common.eventhandler.Cancelable;
-import net.minecraftforge.fml.common.eventhandler.Event;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.eventbus.api.Cancelable;
+import net.minecraftforge.eventbus.api.Event;
 
 @Cancelable
 public class WaterMovementEvent extends Event {
 
   private final Entity entity;
-  private final Vec3d movement;
+  private final Vec3 movement;
 
-  public WaterMovementEvent(Entity entity, Vec3d movement) {
+  public WaterMovementEvent(Entity entity, Vec3 movement) {
     this.entity = entity;
     this.movement = movement;
   }
@@ -20,7 +20,7 @@ public class WaterMovementEvent extends Event {
     return entity;
   }
 
-  public Vec3d getMoveDir() {
+  public Vec3 getMoveDir() {
     return movement;
   }
 }

@@ -5,8 +5,8 @@ import com.google.common.base.Predicates;
 import com.matt.forgehax.util.entity.LocalPlayerInventory;
 import com.matt.forgehax.util.mod.ServiceMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import net.minecraftforge.fml.common.gameevent.TickEvent.ClientTickEvent;
+import net.minecraftforge.event.TickEvent.ClientTickEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import java.util.function.Predicate;
 
@@ -35,7 +35,7 @@ public class HotbarSelectionService extends ServiceMod {
     if (getLocalPlayer() == null) {
       return;
     }
-    LocalPlayerInventory.getInventory().currentItem = index;
+    LocalPlayerInventory.getInventory().selected = index;
   }
 
   private static int selected() {

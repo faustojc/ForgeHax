@@ -1,0 +1,24 @@
+{
+  "required": true,
+  "minVersion": "0.8.5",
+  "package": "com.matt.forgehax.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "forgehax.refmap.json",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "client": [
+    "MixinBlockCollisions",
+    "MixinConnection",
+    "MixinItemBlockRenderTypes",
+    "MixinLevelRenderer",
+    "MixinLocalPlayer",
+    "MixinMinecraft",
+    "MixinMultiPlayerGameMode",
+    "accessor.BlockItemInvoker",
+    "accessor.DisconnectedScreenAccessor",
+    "accessor.MinecraftAccessor",
+    "accessor.TimerAccessor"
+  ],
+  "mixins": []
+}

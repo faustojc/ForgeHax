@@ -7,9 +7,9 @@ import com.matt.forgehax.util.entity.EntityUtils;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.BlockPos;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.AABB;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import static com.matt.forgehax.Helper.getLocalPlayer;
 
@@ -50,7 +50,7 @@ public class SafeWalkMod extends ToggleMod {
         (EntityUtils.isDrivenByPlayer(event.getEntity())
             || event.getEntity() == getLocalPlayer())) {
 
-      AxisAlignedBB axisalignedbb = new AxisAlignedBB(event.getPos()).shrink(0.3D);
+      AABB axisalignedbb = new AABB(event.getPos()).deflate(0.3D);
       if (event.getEntityBox().intersects(axisalignedbb)) {
         if (isAbovePlayer(event.getPos()) &&
             !hasCollisionBox(event.getPos()) &&
@@ -63,13 +63,13 @@ public class SafeWalkMod extends ToggleMod {
   }
 
   private boolean isAbovePlayer(BlockPos pos) {
-    return pos.getY() >= getLocalPlayer().posY;
+    return pos.getY() >= getLocalPlayer().getY();
   }
 
 
   private boolean isAboveBlock(BlockPos pos, int minHeight) {
     for (int i = 0; i < minHeight; i++) {
-      if (hasCollisionBox(pos.down(i))) {
+      if (hasCollisionBox(pos.below(i))) {
         return true;
       }
     }
@@ -77,7 +77,7 @@ public class SafeWalkMod extends ToggleMod {
   }
 
   private boolean hasCollisionBox(BlockPos pos) {
-    return MC.world.getBlockState(pos).getCollisionBoundingBox(MC.world, pos) != null;
+    return !MC.level.getBlockState(pos).getCollisionShape(MC.level, pos).isEmpty();
   }
 
   @Override

@@ -11,19 +11,20 @@ import com.matt.forgehax.util.mod.ServiceMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
 import com.mojang.authlib.GameProfile;
 import joptsimple.internal.Strings;
-import net.minecraft.network.play.server.SPacketChunkData;
-import net.minecraft.network.play.server.SPacketCustomPayload;
-import net.minecraft.network.play.server.SPacketPlayerListItem;
-import net.minecraft.network.play.server.SPacketPlayerListItem.Action;
+import net.minecraft.network.protocol.game.ClientboundCustomPayloadPacket;
+import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
+import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import net.minecraftforge.fml.common.network.FMLNetworkEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import javax.annotation.Nullable;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static com.matt.forgehax.Helper.getLocalPlayer;
 import static com.matt.forgehax.Helper.getLog;
 
 /**
@@ -57,30 +58,24 @@ public class ScoreboardListenerService extends ServiceMod {
     super("ScoreboardListenerService", "Listens for player joining and leaving");
   }
 
-  private void fireEvents(
-      SPacketPlayerListItem.Action action, PlayerInfo info, GameProfile profile) {
+  private void fireEvents(boolean joined, PlayerInfo info, GameProfile profile) {
     if (ignore || info == null) {
       return;
     }
-    switch (action) {
-      case ADD_PLAYER: {
-        MinecraftForge.EVENT_BUS.post(new PlayerConnectEvent.Join(info, profile));
-        break;
-      }
-      case REMOVE_PLAYER: {
-        MinecraftForge.EVENT_BUS.post(new PlayerConnectEvent.Leave(info, profile));
-        break;
-      }
+    if (joined) {
+      MinecraftForge.EVENT_BUS.post(new PlayerConnectEvent.Join(info, profile));
+    } else {
+      MinecraftForge.EVENT_BUS.post(new PlayerConnectEvent.Leave(info, profile));
     }
   }
 
   @SubscribeEvent
-  public void onClientConnect(FMLNetworkEvent.ClientConnectedToServerEvent event) {
+  public void onClientConnect(ClientPlayerNetworkEvent.LoggingIn event) {
     ignore = false;
   }
 
   @SubscribeEvent
-  public void onClientDisconnect(FMLNetworkEvent.ClientDisconnectionFromServerEvent event) {
+  public void onClientDisconnect(ClientPlayerNetworkEvent.LoggingOut event) {
     ignore = false;
   }
 
@@ -90,36 +85,36 @@ public class ScoreboardListenerService extends ServiceMod {
       ignore = false;
     }
 
-    if (!ignore && event.getPacket() instanceof SPacketCustomPayload) {
+    if (!ignore && event.getPacket() instanceof ClientboundCustomPayloadPacket) {
       ignore = true;
       timer.start();
-    } else if (ignore && event.getPacket() instanceof SPacketChunkData) {
+    } else if (ignore && event.getPacket() instanceof ClientboundLevelChunkWithLightPacket) {
       ignore = false;
       timer.reset();
     }
   }
 
+  // player-list (tab list) add: 1.19.3+ splits this out of the old SPacketPlayerListItem
   @SubscribeEvent
-  public void onScoreboardEvent(PacketEvent.Incoming.Pre event) {
-    if (event.getPacket() instanceof SPacketPlayerListItem) {
-      final SPacketPlayerListItem packet = event.getPacket();
-      if (!Action.ADD_PLAYER.equals(packet.getAction())
-          && !Action.REMOVE_PLAYER.equals(packet.getAction())) {
+  public void onPlayerListAdd(PacketEvent.Incoming.Pre event) {
+    if (event.getPacket() instanceof ClientboundPlayerInfoUpdatePacket) {
+      final ClientboundPlayerInfoUpdatePacket packet = event.getPacket();
+      if (!packet.actions().contains(ClientboundPlayerInfoUpdatePacket.Action.ADD_PLAYER)) {
         return;
       }
 
       packet
-          .getEntries()
+          .entries()
           .stream()
           .filter(Objects::nonNull)
           .filter(
               data ->
-                  !Strings.isNullOrEmpty(data.getProfile().getName())
-                      || data.getProfile().getId() != null)
+                  !Strings.isNullOrEmpty(data.profile().getName())
+                      || data.profile().getId() != null)
           .forEach(
               data -> {
-                final String name = data.getProfile().getName();
-                final UUID id = data.getProfile().getId();
+                final String name = data.profile().getName();
+                final UUID id = data.profile().getId();
                 final AtomicInteger retries = new AtomicInteger(this.retries.get());
                 PlayerInfoHelper.registerWithCallback(
                     id,
@@ -127,7 +122,7 @@ public class ScoreboardListenerService extends ServiceMod {
                     new FutureCallback<PlayerInfo>() {
                       @Override
                       public void onSuccess(@Nullable PlayerInfo result) {
-                        fireEvents(packet.getAction(), result, data.getProfile());
+                        fireEvents(true, result, data.profile());
                       }
 
                       @Override
@@ -142,8 +137,59 @@ public class ScoreboardListenerService extends ServiceMod {
                                       + ", retrying ("
                                       + retries.get()
                                       + ")...");
-                          PlayerInfoHelper.registerWithCallback(
-                              data.getProfile().getId(), name, this);
+                          PlayerInfoHelper.registerWithCallback(data.profile().getId(), name, this);
+                        } else {
+                          t.printStackTrace();
+                          PlayerInfoHelper.generateOfflineWithCallback(name, this);
+                        }
+                      }
+                    }
+                );
+              });
+    }
+  }
+
+  // player-list (tab list) remove: now a separate packet carrying only UUIDs
+  @SubscribeEvent
+  public void onPlayerListRemove(PacketEvent.Incoming.Pre event) {
+    if (event.getPacket() instanceof ClientboundPlayerInfoRemovePacket) {
+      final ClientboundPlayerInfoRemovePacket packet = event.getPacket();
+      packet
+          .profileIds()
+          .forEach(
+              id -> {
+                net.minecraft.client.multiplayer.PlayerInfo netInfo =
+                    getLocalPlayer() != null && getLocalPlayer().connection != null
+                        ? getLocalPlayer().connection.getPlayerInfo(id)
+                        : null;
+                if (netInfo == null) {
+                  return;
+                }
+                final GameProfile profile = netInfo.getProfile();
+                final String name = profile.getName();
+                final AtomicInteger retries = new AtomicInteger(this.retries.get());
+                PlayerInfoHelper.registerWithCallback(
+                    id,
+                    name,
+                    new FutureCallback<PlayerInfo>() {
+                      @Override
+                      public void onSuccess(@Nullable PlayerInfo result) {
+                        fireEvents(false, result, profile);
+                      }
+
+                      @Override
+                      public void onFailure(Throwable t) {
+                        if (retries.getAndDecrement() > 0) {
+                          getLog()
+                              .warn(
+                                  "Failed to lookup "
+                                      + name
+                                      + "/"
+                                      + id.toString()
+                                      + ", retrying ("
+                                      + retries.get()
+                                      + ")...");
+                          PlayerInfoHelper.registerWithCallback(id, name, this);
                         } else {
                           t.printStackTrace();
                           PlayerInfoHelper.generateOfflineWithCallback(name, this);

@@ -1,21 +1,21 @@
 package com.matt.forgehax.util.markers;
 
 import com.matt.forgehax.Globals;
-import com.matt.forgehax.asm.reflection.FastReflection;
-import net.minecraft.client.renderer.BufferBuilder;
-import net.minecraft.client.renderer.Tessellator;
-import net.minecraft.client.renderer.chunk.RenderChunk;
-import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
-import net.minecraft.client.renderer.vertex.VertexBuffer;
-import net.minecraft.client.renderer.vertex.VertexFormat;
-import net.minecraft.util.math.BlockPos;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.Tesselator;
+import com.mojang.blaze3d.vertex.VertexBuffer;
+import com.mojang.blaze3d.vertex.VertexFormat;
+import net.minecraft.client.renderer.chunk.ChunkRenderDispatcher;
+import net.minecraft.core.BlockPos;
 
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Created on 1/18/2018 by fr1kin
  */
-public class RenderUploader<E extends Tessellator> implements Globals {
+public class RenderUploader<E extends Tesselator> implements Globals {
 
   private final Uploaders<E> parent;
   private final ReentrantLock _lock = new ReentrantLock();
@@ -40,13 +40,21 @@ public class RenderUploader<E extends Tessellator> implements Globals {
   private int renderCount = 0;
   private BlockPos region = null;
 
+  /**
+   * Buffer produced by {@link #finishDrawing()}, staged until {@link #upload()} sends it to the GPU.
+   */
+  private BufferBuilder.RenderedBuffer pendingBuffer;
+
   public RenderUploader(Uploaders<E> parent, VertexFormat format) {
     this.parent = parent;
-    vertexBuffer = new VertexBuffer(format);
+    // TODO(1.20.1): VertexBuffer no longer takes a VertexFormat at construction time - the format is
+    // inferred from the BufferBuilder's DrawState when upload() is called. Parameter kept for API
+    // compatibility with callers built around the 1.12.2 signature.
+    vertexBuffer = new VertexBuffer(VertexBuffer.Usage.DYNAMIC);
   }
 
   public RenderUploader(Uploaders<E> parent) {
-    this(parent, DefaultVertexFormats.POSITION_COLOR);
+    this(parent, DefaultVertexFormat.POSITION_COLOR);
   }
 
   public boolean isComplete() {
@@ -83,10 +91,13 @@ public class RenderUploader<E extends Tessellator> implements Globals {
     if (tessellator != null) {
       // stop tessellator from drawing
       if (isTessellatorDrawing()) {
-        getBufferBuilder().finishDrawing();
+        finishDrawing();
       }
-      // reset translation
-      getBufferBuilder().setTranslation(0.D, 0.D, 0.D);
+      // discard any geometry that was never uploaded
+      if (pendingBuffer != null) {
+        pendingBuffer.release();
+        pendingBuffer = null;
+      }
       // free tessellator to parent
       parent.cache().free(tessellator);
       // set tessellator to null
@@ -95,7 +106,7 @@ public class RenderUploader<E extends Tessellator> implements Globals {
   }
 
   public BufferBuilder getBufferBuilder() {
-    return getTessellator().getBuffer();
+    return getTessellator().getBuilder();
   }
 
   /**
@@ -145,25 +156,25 @@ public class RenderUploader<E extends Tessellator> implements Globals {
     if (getTessellator() == null) {
       return false; // no tessellator
     }
-    if (!MC.isCallingFromMinecraftThread()) {
+    if (!RenderSystem.isOnRenderThread()) {
       throw new UploaderException("Not calling from main Minecraft thread");
     }
-    // if(isTessellatorDrawing()) throw new UploaderException("Tried to upload VBO while tessellator
-    // is still drawing");
-
-    // while (isTessellatorDrawing()); // wait until drawing is finished. could cause thread lockups
 
     boolean update = false;
 
     lock().lock();
     try {
       if (isTessellatorDrawing()) {
-        finishDrawing(); // force to stop
+        finishDrawing(); // force to stop, stages pendingBuffer
         update = true;
       }
 
-      getBufferBuilder().reset();
-      vertexBuffer.bufferData(getBufferBuilder().getByteBuffer());
+      if (pendingBuffer != null) {
+        vertexBuffer.bind();
+        vertexBuffer.upload(pendingBuffer); // upload() releases the RenderedBuffer internally
+        VertexBuffer.unbind();
+        pendingBuffer = null;
+      }
     } finally {
       setComplete(true);
       uploaded = true;
@@ -182,12 +193,12 @@ public class RenderUploader<E extends Tessellator> implements Globals {
     if (!isUploaded()) {
       return;
     }
-    if (!MC.isCallingFromMinecraftThread()) {
+    if (!RenderSystem.isOnRenderThread()) {
       throw new UploaderException("Not calling from main Minecraft thread");
     }
 
     try {
-      vertexBuffer.deleteGlBuffers();
+      vertexBuffer.close();
     } finally {
       uploaded = false;
       setComplete(false);
@@ -199,8 +210,7 @@ public class RenderUploader<E extends Tessellator> implements Globals {
    * Check if the tessellator instance is current drawing
    */
   public boolean isTessellatorDrawing() {
-    return getTessellator() != null
-        && FastReflection.Fields.BufferBuilder_isDrawing.get(getBufferBuilder());
+    return getTessellator() != null && getBufferBuilder().building();
   }
 
   public void finishDrawing() {
@@ -208,8 +218,8 @@ public class RenderUploader<E extends Tessellator> implements Globals {
       return;
     }
 
-    renderCount = getBufferBuilder().getVertexCount() / 24;
-    getBufferBuilder().finishDrawing();
+    pendingBuffer = getBufferBuilder().end();
+    renderCount = pendingBuffer.drawState().vertexCount() / 24;
   }
 
   /**
@@ -240,12 +250,12 @@ public class RenderUploader<E extends Tessellator> implements Globals {
     return region;
   }
 
-  public void setRegion(RenderChunk chunk) {
-    region = new BlockPos(chunk.getPosition()); // copy because RenderChunk.position is mutable
+  public void setRegion(ChunkRenderDispatcher.RenderChunk chunk) {
+    region = new BlockPos(chunk.getOrigin()); // copy because RenderChunk.origin is mutable
   }
 
-  public boolean isCorrectRegion(RenderChunk chunk) {
-    return region != null && region.equals(chunk.getPosition());
+  public boolean isCorrectRegion(ChunkRenderDispatcher.RenderChunk chunk) {
+    return region != null && region.equals(chunk.getOrigin());
   }
 
   public ReentrantLock lock() {

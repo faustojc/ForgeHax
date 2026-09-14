@@ -7,17 +7,17 @@ import com.matt.forgehax.util.color.Colors;
 import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.entity.EntityUtils;
 import com.matt.forgehax.util.entity.mobtypes.MobTypeEnum;
+import com.matt.forgehax.util.draw.SurfaceBuilder;
 import com.matt.forgehax.util.math.AngleHelper;
 import com.matt.forgehax.util.math.Plane;
 import com.matt.forgehax.util.math.VectorUtils;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.client.renderer.GlStateManager;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityLivingBase;
-import net.minecraft.util.math.Vec3d;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 import org.lwjgl.opengl.GL11;
 
 import java.util.ArrayList;
@@ -99,8 +99,8 @@ public class Tracers extends ToggleMod implements Colors {
   @SubscribeEvent
   public void onUpdate(LocalPlayerUpdateEvent event) {
     renderEntities.clear();
-    for (Entity entity : getWorld().loadedEntityList) {
-      if (!Objects.equals(entity, getLocalPlayer()) && entity instanceof EntityLivingBase) {
+    for (Entity entity : getWorld().entitiesForRendering()) {
+      if (!Objects.equals(entity, getLocalPlayer()) && entity instanceof LivingEntity) {
         EntityRelations relations = new EntityRelations(entity);
         if (!relations.getRelationship().equals(MobTypeEnum.INVALID)) {
           renderEntities.add(relations);
@@ -116,14 +116,8 @@ public class Tracers extends ToggleMod implements Colors {
 
   @SubscribeEvent
   public void onDrawScreen(Render2DEvent event) {
-    GlStateManager.enableBlend();
-    GlStateManager.tryBlendFuncSeparate(
-        GlStateManager.SourceFactor.SRC_ALPHA,
-        GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA,
-        GlStateManager.SourceFactor.ONE,
-        GlStateManager.DestFactor.ZERO
-    );
-    GlStateManager.disableTexture2D();
+    SurfaceBuilder builder = event.getSurfaceBuilder();
+    builder.reset().push().task(SurfaceBuilder::enableBlend).task(SurfaceBuilder::disableTexture2D);
 
     if (antialias.get()) {
       GL11.glEnable(GL11.GL_POLYGON_SMOOTH);
@@ -140,19 +134,13 @@ public class Tracers extends ToggleMod implements Colors {
         Entity entity = er.getEntity();
         MobTypeEnum relationship = er.getRelationship();
 
-        Vec3d entityPos =
-            EntityUtils.getInterpolatedEyePos(entity, MC.getRenderPartialTicks());
+        Vec3 entityPos =
+            EntityUtils.getInterpolatedEyePos(entity, event.getPartialTicks());
         Plane screenPos = VectorUtils.toScreen(entityPos);
 
         Color color = er.getColor().setAlpha(alpha.get());
-        GlStateManager.color(
-            color.getRedAsFloat(),
-            color.getGreenAsFloat(),
-            color.getBlueAsFloat(),
-            color.getAlphaAsFloat()
-        );
-
-        GlStateManager.translate(0, 0, er.getDepth());
+        builder.color(color.toBuffer());
+        builder.translate(0, 0, er.getDepth());
 
         if (dm.equals(Mode.BOTH) || dm.equals(Mode.ARROWS)) {
           if (!screenPos.isVisible()) {
@@ -201,7 +189,7 @@ public class Tracers extends ToggleMod implements Colors {
             double ang = Math.toDegrees(Math.acos((ux * wx + uy * wy) / (mu * mw)));
 
             // don't allow NaN angles
-            if (ang == Float.NaN) {
+            if (Double.isNaN(ang)) {
               ang = 0;
             }
 
@@ -211,56 +199,42 @@ public class Tracers extends ToggleMod implements Colors {
             }
 
             // normalize
-            ang = (float) AngleHelper.normalizeInDegrees(ang);
+            ang = AngleHelper.normalizeInDegrees(ang);
 
             // --------------------
 
             int size = relationship.equals(MobTypeEnum.PLAYER) ? 8 : 5;
 
-            GlStateManager.pushMatrix();
-
-            GlStateManager.translate(x, y, 0);
-            GlStateManager.rotate((float) ang, 0.f, 0.f, size / 2.f);
-
-            GlStateManager.color(
-                color.getRedAsFloat(),
-                color.getGreenAsFloat(),
-                color.getBlueAsFloat(),
-                color.getAlphaAsFloat()
-            );
-
-            GlStateManager.glBegin(GL11.GL_TRIANGLES);
-            {
-              GL11.glVertex2d(0, 0);
-              GL11.glVertex2d(-size, -size);
-              GL11.glVertex2d(-size, size);
-            }
-            GlStateManager.glEnd();
-
-            GlStateManager.popMatrix();
+            builder.push()
+                .translate(x, y, 0)
+                .rotate(ang, 0, 0, 1)
+                .color(color.toBuffer())
+                .beginPolygon()
+                .vertex(0, 0)
+                .vertex(-size, -size)
+                .vertex(-size, size)
+                .end()
+                .pop();
           }
         }
 
         if (dm.equals(Mode.BOTH) || dm.equals(Mode.LINES)) {
-          GlStateManager.glBegin(GL11.GL_LINES);
-          {
-            GL11.glVertex2d(cx, cy);
-            GL11.glVertex2d(screenPos.getX(), screenPos.getY());
-          }
-          GlStateManager.glEnd();
+          builder.beginLines()
+              .vertex(cx, cy)
+              .vertex(screenPos.getX(), screenPos.getY())
+              .end();
         }
 
-        GlStateManager.translate(0, 0, -er.getDepth());
+        builder.translate(0, 0, -er.getDepth());
       }
     }
 
-    GlStateManager.enableTexture2D();
-    GlStateManager.disableBlend();
+    builder.task(SurfaceBuilder::enableTexture2D)
+        .task(SurfaceBuilder::disableBlend)
+        .pop();
 
     GL11.glDisable(GL11.GL_POLYGON_SMOOTH);
     GL11.glDisable(GL11.GL_LINE_SMOOTH);
-
-    GlStateManager.color(1.f, 1.f, 1.f, 1.f);
   }
 
   enum Mode {

@@ -5,10 +5,10 @@ import com.google.common.collect.Lists;
 import com.matt.forgehax.asm.events.PacketEvent;
 import com.matt.forgehax.util.mod.ServiceMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.network.play.server.SPacketTimeUpdate;
-import net.minecraft.util.math.MathHelper;
-import net.minecraftforge.event.world.WorldEvent;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraft.network.protocol.game.ClientboundSetTimePacket;
+import net.minecraft.util.Mth;
+import net.minecraftforge.event.level.LevelEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import java.util.Collections;
 import java.util.List;
@@ -57,14 +57,14 @@ public class TickRateService extends ServiceMod {
   }
 
   @SubscribeEvent
-  public void onWorldLoad(WorldEvent.Load event) {
+  public void onWorldLoad(LevelEvent.Load event) {
     timeLastTimeUpdate = -1;
     TICK_DATA.onWorldLoaded();
   }
 
   @SubscribeEvent
   public void onPacketPreceived(PacketEvent.Incoming.Pre event) {
-    if (event.getPacket() instanceof SPacketTimeUpdate) {
+    if (event.getPacket() instanceof ClientboundSetTimePacket) {
       long currentTimeMillis = System.currentTimeMillis();
       if (timeLastTimeUpdate != -1) {
         TICK_DATA.onTimePacketIncoming(currentTimeMillis - timeLastTimeUpdate);
@@ -105,7 +105,7 @@ public class TickRateService extends ServiceMod {
         total += rate;
         CalculationData d = data.get(size - 1);
         if (d != null) {
-          d.average = MathHelper.clamp(total / (double) (size), MIN_TICKRATE, MAX_TICKRATE);
+          d.average = Mth.clamp(total / (double) (size), MIN_TICKRATE, MAX_TICKRATE);
         }
       }
     }
@@ -126,7 +126,7 @@ public class TickRateService extends ServiceMod {
 
     private void onTimePacketIncoming(long difference) {
       double timeElapsed = ((double) (difference) / 1000.D);
-      rates.offer(MathHelper.clamp(MAX_TICKRATE / timeElapsed, MIN_TICKRATE, MAX_TICKRATE));
+      rates.offer(Mth.clamp(MAX_TICKRATE / timeElapsed, MIN_TICKRATE, MAX_TICKRATE));
       // recalculate tick rate data
       recalculate();
     }

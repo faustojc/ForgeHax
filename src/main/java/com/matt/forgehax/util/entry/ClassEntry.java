@@ -3,7 +3,6 @@ package com.matt.forgehax.util.entry;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import com.matt.forgehax.util.serialization.ISerializableJson;
-import net.minecraft.launchwrapper.Launch;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
@@ -36,7 +35,7 @@ public class ClassEntry implements ISerializableJson {
   public Class<?> getClassInstance() {
     if (clazz == null) {
       try {
-        clazz = Class.forName(clazzName, true, Launch.classLoader);
+        clazz = Class.forName(clazzName, true, ClassEntry.class.getClassLoader());
       } catch (Throwable t) {
       }
     }

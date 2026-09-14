@@ -2,21 +2,27 @@ package com.matt.forgehax.util.draw;
 
 import com.matt.forgehax.util.color.Color;
 import com.matt.forgehax.util.draw.font.MinecraftFontRenderer;
-import net.minecraft.client.renderer.GlStateManager;
-import net.minecraft.client.renderer.RenderHelper;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.math.MathHelper;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.Tesselator;
+import com.mojang.blaze3d.vertex.VertexFormat;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.resources.ResourceLocation;
+import org.joml.Quaternionf;
+import org.lwjgl.opengl.GL11;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Stack;
 
 import static com.matt.forgehax.Globals.MC;
-import static com.matt.forgehax.Helper.getLocalPlayer;
-import static org.lwjgl.opengl.GL11.*;
 
-/**
- * Created on 9/2/2017 by fr1kin
- */
+/** Fluent 2D drawing adapter retained for existing module render code. */
 public class SurfaceBuilder {
 
   public static final int COLOR = 1;
@@ -27,88 +33,98 @@ public class SurfaceBuilder {
 
   private static final SurfaceBuilder INSTANCE = new SurfaceBuilder();
   private final Stack<RenderSettings> settings = new Stack<>();
-
-  // --------------------
-  private final RenderSettings DEFAULT_SETTINGS = new RenderSettings();
+  private final RenderSettings defaultSettings = new RenderSettings();
+  private final List<Vertex> vertices = new ArrayList<>();
+  private VertexFormat.Mode mode;
 
   public static SurfaceBuilder getBuilder() {
     return INSTANCE;
   }
 
   public static void disableTexture2D() {
-    GlStateManager.disableTexture2D();
+    // Texture enable/disable is represented by the selected shader in 1.20.1.
   }
 
   public static void enableTexture2D() {
-    GlStateManager.enableTexture2D();
+    // Texture enable/disable is represented by the selected shader in 1.20.1.
   }
 
   public static void enableBlend() {
-    GlStateManager.enableBlend();
-    GlStateManager.tryBlendFuncSeparate(
-        GlStateManager.SourceFactor.SRC_ALPHA,
-        GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA,
-        GlStateManager.SourceFactor.ONE,
-        GlStateManager.DestFactor.ZERO
-    );
+    RenderSystem.enableBlend();
+    RenderSystem.defaultBlendFunc();
   }
 
   public static void disableBlend() {
-    GlStateManager.disableBlend();
+    RenderSystem.disableBlend();
   }
 
   public static void enableFontRendering() {
-    GlStateManager.disableDepth();
+    RenderSystem.disableDepthTest();
   }
 
   public static void disableFontRendering() {
-    GlStateManager.enableDepth();
+    RenderSystem.enableDepthTest();
   }
 
   public static void enableItemRendering() {
-    RenderHelper.enableGUIStandardItemLighting();
-    GlStateManager.disableLighting();
-    GlStateManager.enableRescaleNormal();
-    GlStateManager.enableColorMaterial();
-    GlStateManager.enableLighting();
+    RenderSystem.enableBlend();
+    RenderSystem.defaultBlendFunc();
   }
 
   public static void disableItemRendering() {
-    GlStateManager.disableLighting();
-    GlStateManager.enableDepth();
+    RenderSystem.disableBlend();
+    RenderSystem.enableDepthTest();
   }
 
   public static void clearColor() {
-    GlStateManager.color(1.f, 1.f, 1.f, 1.f);
+    RenderSystem.setShaderColor(1.f, 1.f, 1.f, 1.f);
   }
 
   private RenderSettings current() {
-    return !settings.isEmpty() ? settings.peek() : DEFAULT_SETTINGS;
+    return settings.isEmpty() ? defaultSettings : settings.peek();
   }
 
-  public SurfaceBuilder begin(int mode) {
-    glBegin(mode);
+  public SurfaceBuilder begin(int glMode) {
+    mode = modeFor(glMode);
+    vertices.clear();
     return this;
   }
 
   public SurfaceBuilder beginLines() {
-    return begin(GL_LINES);
+    return begin(GL11.GL_LINES);
   }
 
   public SurfaceBuilder beginLineLoop() {
-    return begin(GL_LINE_LOOP);
+    return begin(GL11.GL_LINE_LOOP);
   }
 
   public SurfaceBuilder beginQuads() {
-    return begin(GL_QUADS);
+    return begin(GL11.GL_QUADS);
   }
 
   public SurfaceBuilder beginPolygon() {
-    return begin(GL_POLYGON);
+    return begin(GL11.GL_POLYGON);
   }
 
   public SurfaceBuilder end() {
-    glEnd();
+    if (mode == null || vertices.isEmpty()) {
+      return this;
+    }
+
+    BufferBuilder builder = Tesselator.getInstance().getBuilder();
+    builder.begin(mode, DefaultVertexFormat.POSITION_COLOR);
+    PoseStack.Pose pose = getPoseStack().last();
+    for (Vertex vertex : vertices) {
+      builder.vertex(pose.pose(), (float) vertex.x, (float) vertex.y, (float) vertex.z)
+          .color(vertex.red, vertex.green, vertex.blue, vertex.alpha)
+          .endVertex();
+    }
+    RenderSystem.setShader(GameRenderer::getPositionColorShader);
+    RenderSystem.enableBlend();
+    RenderSystem.defaultBlendFunc();
+    BufferUploader.drawWithShader(builder.end());
+    vertices.clear();
+    mode = null;
     return this;
   }
 
@@ -123,18 +139,10 @@ public class SurfaceBuilder {
 
   public SurfaceBuilder apply(int flags) {
     RenderSettings current = current();
-    if ((flags & COLOR) == COLOR) {
-      current.applyColor();
-    }
-    if ((flags & SCALE) == SCALE) {
-      current.applyScale();
-    }
-    if ((flags & TRANSLATION) == TRANSLATION) {
-      current.applyTranslation();
-    }
-    if ((flags & ROTATION) == ROTATION) {
-      current.applyRotation();
-    }
+    if ((flags & COLOR) == COLOR) current.applyColor();
+    if ((flags & SCALE) == SCALE) current.applyScale();
+    if ((flags & TRANSLATION) == TRANSLATION) current.applyTranslation();
+    if ((flags & ROTATION) == ROTATION) current.applyRotation();
     return this;
   }
 
@@ -144,44 +152,29 @@ public class SurfaceBuilder {
 
   public SurfaceBuilder reset(int flags) {
     RenderSettings current = current();
-    if ((flags & COLOR) == COLOR) {
-      current.resetColor();
-    }
-    if ((flags & SCALE) == SCALE) {
-      current.resetScale();
-    }
-    if ((flags & TRANSLATION) == TRANSLATION) {
-      current.resetTranslation();
-    }
-    if ((flags & ROTATION) == ROTATION) {
-      current.resetRotation();
-    }
+    if ((flags & COLOR) == COLOR) current.resetColor();
+    if ((flags & SCALE) == SCALE) current.resetScale();
+    if ((flags & TRANSLATION) == TRANSLATION) current.resetTranslation();
+    if ((flags & ROTATION) == ROTATION) current.resetRotation();
     return this;
   }
 
   public SurfaceBuilder push() {
-    GlStateManager.pushMatrix();
+    getPoseStack().pushPose();
     settings.push(new RenderSettings());
     return this;
   }
 
   public SurfaceBuilder pop() {
-    if (!settings.isEmpty()) {
-      settings.pop();
-    }
-    GlStateManager.popMatrix();
+    if (!settings.isEmpty()) settings.pop();
+    getPoseStack().popPose();
     return this;
   }
 
   public SurfaceBuilder color(double r, double g, double b, double a) {
-    current()
-        .setColor4d(
-            new double[]{
-                MathHelper.clamp(r, 0.D, 1.D),
-                MathHelper.clamp(g, 0.D, 1.D),
-                MathHelper.clamp(b, 0.D, 1.D),
-                MathHelper.clamp(a, 0.D, 1.D)
-            });
+    current().setColor4d(new double[]{
+        clamp(r), clamp(g), clamp(b), clamp(a)
+    });
     return this;
   }
 
@@ -190,7 +183,7 @@ public class SurfaceBuilder {
         (buffer >> 16 & 255) / 255.D,
         (buffer >> 8 & 255) / 255.D,
         (buffer & 255) / 255.D,
-        (buffer >> 24 & 255) / 255.D
+        (buffer >>> 24 & 255) / 255.D
     );
   }
 
@@ -226,18 +219,18 @@ public class SurfaceBuilder {
   }
 
   public SurfaceBuilder width(double width) {
-    GlStateManager.glLineWidth((float) width);
+    RenderSystem.lineWidth((float) width);
     return this;
   }
 
   public SurfaceBuilder vertex(double x, double y, double z) {
-    glVertex3d(x, y, z);
+    int color = current().hasColor() ? Color.of(current().getColor4d()).toBuffer() : 0xFFFFFFFF;
+    vertices.add(new Vertex(x, y, z, color));
     return this;
   }
 
   public SurfaceBuilder vertex(double x, double y) {
-    glVertex2d(x, y);
-    return this;
+    return vertex(x, y, 0.D);
   }
 
   public SurfaceBuilder line(double startX, double startY, double endX, double endY) {
@@ -254,25 +247,13 @@ public class SurfaceBuilder {
   }
 
   private SurfaceBuilder text(String text, double x, double y, boolean shadow) {
-    if (current().hasFontRenderer()) // use custom font renderer
-    {
-      current()
-          .getFontRenderer()
-          .drawString(
-              text,
-              x,
-              y + 1 /*TTF font renderer needs to be offset by 1*/,
-              Color.of(current().getColor4d()).toBuffer(),
-              shadow
-          );
+    if (current().hasFontRenderer()) {
+      current().getFontRenderer().drawString(
+          text, x, y + 1, Color.of(current().getColor4d()).toBuffer(), shadow);
     } else {
-      // use default minecraft font
-      GlStateManager.pushMatrix();
-      GlStateManager.translate(x, y, 0.D);
-
-      MC.fontRenderer.drawString(text, 0, 0, Color.of(current().getColor4d()).toBuffer(), shadow);
-
-      GlStateManager.popMatrix();
+      SurfaceHelper.drawString(null, text, x, y,
+          current().hasColor() ? Color.of(current().getColor4d()).toBuffer() : 0xFFFFFFFF,
+          shadow);
     }
     return this;
   }
@@ -291,236 +272,182 @@ public class SurfaceBuilder {
   }
 
   public SurfaceBuilder item(ItemStack stack, double x, double y) {
-    MC.getRenderItem().zLevel = 100.f;
-    SurfaceHelper.renderItemAndEffectIntoGUI(
-        getLocalPlayer(), stack, x, y, current().hasScale() ? current().getScale3d()[0] : 16.D);
-    MC.getRenderItem().zLevel = 0.f;
+    SurfaceHelper.renderItemAndEffectIntoGUI(null, stack, x, y,
+        current().hasScale() ? current().getScale3d()[0] : 16.D);
     return this;
   }
 
   public SurfaceBuilder itemOverlay(ItemStack stack, double x, double y) {
     SurfaceHelper.renderItemOverlayIntoGUI(
-        MC.fontRenderer,
-        stack,
-        x,
-        y,
-        null,
+        MC.font, stack, x, y, null,
         current().hasScale() ? current().getScale3d()[0] : 16.D
     );
     return this;
   }
 
   public SurfaceBuilder head(ResourceLocation resource, double x, double y) {
-    MC.renderEngine.bindTexture(resource);
     double scale = current().hasScale() ? current().getScale3d()[0] : 12.D;
-    SurfaceHelper.drawScaledCustomSizeModalRect(
-        (x * (1 / scale)), (y * (1 / scale)), 8.0F, 8.0F, 8, 8, 12, 12, 64.0F, 64.0F);
-    SurfaceHelper.drawScaledCustomSizeModalRect(
-        (x * (1 / scale)), (y * (1 / scale)), 40.0F, 8.0F, 8, 8, 12, 12, 64.0F, 64.0F);
+    SurfaceHelper.drawHead(resource, x, y, (float) scale / 12.f);
     return this;
   }
-
-  // --------------------
 
   public int getFontWidth(String text) {
     return current().hasFontRenderer()
         ? current().getFontRenderer().getStringWidth(text)
-        : MC.fontRenderer.getStringWidth(text);
+        : MC.font.width(text);
   }
 
   public int getFontHeight() {
     return current().hasFontRenderer()
         ? current().getFontRenderer().getHeight()
-        : MC.fontRenderer.FONT_HEIGHT;
+        : MC.font.lineHeight;
   }
 
   public int getFontHeight(String text) {
     return getFontHeight();
   }
 
-  private double _getScaled(int index, double p) {
-    return p * (1.D / current().getScale3d()[index]);
+  private PoseStack getPoseStack() {
+    return SurfaceHelper.getGraphics() == null
+        ? RenderSystem.getModelViewStack()
+        : SurfaceHelper.getGraphics().pose();
   }
 
-  public double getScaledX(double x) {
-    return _getScaled(0, x);
+  private static VertexFormat.Mode modeFor(int mode) {
+    switch (mode) {
+      case GL11.GL_LINES:
+        return VertexFormat.Mode.LINES;
+      case GL11.GL_LINE_LOOP:
+        return VertexFormat.Mode.LINE_STRIP;
+      case GL11.GL_QUADS:
+        return VertexFormat.Mode.QUADS;
+      case GL11.GL_POLYGON:
+        return VertexFormat.Mode.TRIANGLE_FAN;
+      default:
+        throw new IllegalArgumentException("Unsupported drawing mode: " + mode);
+    }
   }
 
-  public double getScaledY(double y) {
-    return _getScaled(1, y);
+  private static double clamp(double value) {
+    return Math.max(0.D, Math.min(1.D, value));
   }
 
-  public double getScaledZ(double z) {
-    return _getScaled(2, z);
+  private static final class Vertex {
+    private final double x;
+    private final double y;
+    private final double z;
+    private final int red;
+    private final int green;
+    private final int blue;
+    private final int alpha;
+
+    private Vertex(double x, double y, double z, int argb) {
+      this.x = x;
+      this.y = y;
+      this.z = z;
+      this.red = argb >> 16 & 255;
+      this.green = argb >> 8 & 255;
+      this.blue = argb & 255;
+      this.alpha = argb >>> 24 & 255;
+    }
   }
 
-  public double getScaled(double p) {
-    return getScaledX(p);
-  }
-
-  public double getItemSize() {
-    return 16;
-  }
-
-  private static class RenderSettings {
-
-    private static final double[] EMPTY_VECTOR3D = new double[]{0.D, 0.D, 0.D};
-    private static final double[] EMPTY_VECTOR4D = new double[]{0.D, 0.D, 0.D, 0.D};
-
-    private double[] color4d = EMPTY_VECTOR4D; // 0-3 = rgba
-    private double[] scale3d = EMPTY_VECTOR3D; // 0-2 = xyz
-    private double[] translate3d = EMPTY_VECTOR3D; // 0-2 = xyz
-    private double[] rotated4d = EMPTY_VECTOR4D; // 0 = angle, 1-3 = xyz
-
+  private static final class RenderSettings {
+    private double[] color4d;
+    private double[] scale3d;
+    private double[] translate3d;
+    private double[] rotated4d;
     private boolean autoApply = true;
+    private MinecraftFontRenderer fontRenderer;
 
-    private MinecraftFontRenderer fontRenderer = null;
+    private double[] getColor4d() { return color4d; }
+    private double[] getScale3d() { return scale3d; }
+    private boolean hasColor() { return color4d != null; }
+    private boolean hasScale() { return scale3d != null; }
+    private boolean hasTranslation() { return translate3d != null; }
+    private boolean hasRotation() { return rotated4d != null; }
+    private boolean hasFontRenderer() { return fontRenderer != null; }
+    private MinecraftFontRenderer getFontRenderer() { return fontRenderer; }
+    private void setFontRenderer(MinecraftFontRenderer value) { fontRenderer = value; }
+    private void setAutoApply(boolean value) { autoApply = value; }
 
-    public double[] getColor4d() {
-      return color4d;
+    private void setColor4d(double[] value) {
+      color4d = value;
+      if (autoApply) applyColor();
     }
 
-    public void setColor4d(double[] color4d) {
-      this.color4d = color4d;
-      if (autoApply) {
-        applyColor();
-      }
+    private void setScale3d(double[] value) {
+      scale3d = value;
+      if (autoApply) applyScale();
     }
 
-    public double[] getScale3d() {
-      return scale3d;
+    private void setTranslate3d(double[] value) {
+      translate3d = value;
+      if (autoApply) applyTranslation();
     }
 
-    public void setScale3d(double[] scale3d) {
-      this.scale3d = scale3d;
-      if (autoApply) {
-        applyScale();
-      }
+    private void setRotated4d(double[] value) {
+      rotated4d = value;
+      if (autoApply) applyRotation();
     }
 
-    public double[] getTranslate3d() {
-      return translate3d;
+    private PoseStack pose() {
+      return SurfaceHelper.getGraphics() == null
+          ? RenderSystem.getModelViewStack()
+          : SurfaceHelper.getGraphics().pose();
     }
 
-    public void setTranslate3d(double[] translate3d) {
-      this.translate3d = translate3d;
-      if (autoApply) {
-        applyTranslation();
-      }
-    }
-
-    public double[] getRotated4d() {
-      return rotated4d;
-    }
-
-    public void setRotated4d(double[] rotated4d) {
-      this.rotated4d = rotated4d;
-      if (autoApply) {
-        applyRotation();
-      }
-    }
-
-    public MinecraftFontRenderer getFontRenderer() {
-      return fontRenderer;
-    }
-
-    public void setFontRenderer(MinecraftFontRenderer fontRenderer) {
-      this.fontRenderer = fontRenderer;
-    }
-
-    public void setAutoApply(boolean autoApply) {
-      this.autoApply = autoApply;
-    }
-
-    public boolean hasColor() {
-      return color4d != EMPTY_VECTOR4D;
-    }
-
-    public boolean hasScale() {
-      return scale3d != EMPTY_VECTOR3D;
-    }
-
-    public boolean hasTranslation() {
-      return translate3d != EMPTY_VECTOR3D;
-    }
-
-    public boolean hasRotation() {
-      return rotated4d != EMPTY_VECTOR4D;
-    }
-
-    public boolean hasFontRenderer() {
-      return fontRenderer != null;
-    }
-
-    public void applyColor() {
+    private void applyColor() {
       if (hasColor()) {
-        glColor4d(color4d[0], color4d[1], color4d[2], color4d[3]);
+        RenderSystem.setShaderColor((float) color4d[0], (float) color4d[1],
+            (float) color4d[2], (float) color4d[3]);
       }
     }
 
-    public void applyScale() {
-      if (hasScale()) {
-        glScaled(scale3d[0], scale3d[1], scale3d[2]);
-      }
+    private void applyScale() {
+      if (hasScale()) pose().scale((float) scale3d[0], (float) scale3d[1], (float) scale3d[2]);
     }
 
-    public void applyTranslation() {
-      if (hasTranslation()) {
-        glTranslated(translate3d[0], translate3d[1], translate3d[2]);
-      }
+    private void applyTranslation() {
+      if (hasTranslation()) pose().translate(translate3d[0], translate3d[1], translate3d[2]);
     }
 
-    public void applyRotation() {
+    private void applyRotation() {
       if (hasRotation()) {
-        glRotated(rotated4d[0], rotated4d[1], rotated4d[2], rotated4d[3]);
+        pose().mulPose(new Quaternionf().rotateAxis(
+            (float) Math.toRadians(rotated4d[0]),
+            (float) rotated4d[1], (float) rotated4d[2], (float) rotated4d[3]));
       }
     }
 
-    public void clearColor() {
-      color4d = EMPTY_VECTOR4D;
-    }
-
-    public void clearScale() {
-      scale3d = EMPTY_VECTOR3D;
-    }
-
-    public void clearTranslation() {
-      translate3d = EMPTY_VECTOR3D;
-    }
-
-    public void clearRotation() {
-      rotated4d = EMPTY_VECTOR4D;
-    }
-
-    public void clearFontRenderer() {
-      fontRenderer = null;
-    }
-
-    public void resetColor() {
+    private void resetColor() {
       if (hasColor()) {
-        clearColor();
-        glColor4d(1.D, 1.D, 1.D, 1.D);
+        color4d = null;
+        RenderSystem.setShaderColor(1.f, 1.f, 1.f, 1.f);
       }
     }
 
-    public void resetScale() {
+    private void resetScale() {
       if (hasScale()) {
-        clearScale();
-        glScaled(1.D, 1.D, 1.D);
+        pose().scale((float) (1.D / scale3d[0]), (float) (1.D / scale3d[1]),
+            (float) (1.D / scale3d[2]));
+        scale3d = null;
       }
     }
 
-    public void resetTranslation() {
+    private void resetTranslation() {
       if (hasTranslation()) {
-        clearTranslation();
-        glTranslated(0.D, 0.D, 0.D);
+        pose().translate(-translate3d[0], -translate3d[1], -translate3d[2]);
+        translate3d = null;
       }
     }
 
-    public void resetRotation() {
+    private void resetRotation() {
       if (hasRotation()) {
-        clearRotation();
-        glRotated(0.D, 0.D, 0.D, 0.D);
+        pose().mulPose(new Quaternionf().rotateAxis(
+            (float) -Math.toRadians(rotated4d[0]),
+            (float) rotated4d[1], (float) rotated4d[2], (float) rotated4d[3]));
+        rotated4d = null;
       }
     }
   }

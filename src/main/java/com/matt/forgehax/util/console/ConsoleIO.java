@@ -3,8 +3,8 @@ package com.matt.forgehax.util.console;
 import com.matt.forgehax.Globals;
 import com.matt.forgehax.Helper;
 import joptsimple.internal.Strings;
-import net.minecraft.util.text.Style;
-import net.minecraft.util.text.TextFormatting;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Style;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 // TODO: fix memory leak
 public class ConsoleIO implements Globals {
 
-  public static final Style HEADING = new Style().setColor(TextFormatting.GRAY).setItalic(true);
+  public static final Style HEADING = Style.EMPTY.withColor(ChatFormatting.GRAY).withItalic(true);
 
   private static final ThreadLocal<AtomicInteger> INDENTATION = new ThreadLocal<>();
   private static final int MIN_INDENT = 1;

@@ -7,21 +7,19 @@ import com.matt.forgehax.gui.elements.SettingControl;
 import com.matt.forgehax.util.command.Command;
 import com.matt.forgehax.util.command.CommandStub;
 import com.matt.forgehax.util.command.Setting;
-import com.matt.forgehax.util.draw.SurfaceHelper;
 import com.matt.forgehax.util.mod.BaseMod;
-import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.gui.ScaledResolution;
-import net.minecraft.util.ChatAllowedCharacters;
-import org.lwjgl.input.Keyboard;
-import org.lwjgl.input.Mouse;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.SharedConstants;
+import net.minecraft.network.chat.Component;
+import org.lwjgl.glfw.GLFW;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /** Large, non-animated module control center. */
-public class ClickGui extends GuiScreen implements Globals {
+public class ClickGui extends Screen implements Globals {
 
   private static final int SIDEBAR_TOP = 36;
   private static final int MODULE_HEADER_H = 78;
@@ -52,8 +50,10 @@ public class ClickGui extends GuiScreen implements Globals {
   private SettingControl expandedEnum;
   private SettingControl draggingSlider;
   private boolean capturingBind;
+  private GuiGraphics graphics;
 
   private ClickGui() {
+    super(Component.literal("ForgeHax"));
   }
 
   public static ClickGui getInstance() {
@@ -65,57 +65,59 @@ public class ClickGui extends GuiScreen implements Globals {
   }
 
   @Override
-  public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+  public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTicks) {
+    this.graphics = graphics;
     if (geometry == null || geometry.getScreenWidth() != width || geometry.getScreenHeight() != height) {
       layout();
     }
     if (draggingSlider != null) {
-      if (Mouse.isButtonDown(0)) {
+      if (GLFW.glfwGetMouseButton(MC.getWindow().getWindow(), GLFW.GLFW_MOUSE_BUTTON_LEFT)
+          == GLFW.GLFW_PRESS) {
         setSliderFromMouse(draggingSlider, mouseX);
       } else {
         draggingSlider = null;
       }
     }
-    SurfaceHelper.drawRect(0, 0, width, height, GuiPalette.BACKDROP);
+    drawRect(0, 0, width, height, GuiPalette.BACKDROP);
     GuiRect modal = geometry.getModal();
-    SurfaceHelper.drawRect(modal.getX(), modal.getY(), modal.getWidth(), modal.getHeight(), GuiPalette.MODAL);
+    drawRect(modal.getX(), modal.getY(), modal.getWidth(), modal.getHeight(), GuiPalette.MODAL);
     border(modal, GuiPalette.DIVIDER);
     drawTopBar(mouseX, mouseY);
     drawSearch();
-    sidebar.draw(mouseX, mouseY);
+    sidebar.draw(graphics, mouseX, mouseY);
     drawModuleHeader(mouseX, mouseY);
-    drawSettings(mouseX, mouseY);
-    drawEnumMenu(mouseX, mouseY);
+    drawSettings(graphics, mouseX, mouseY);
+    drawEnumMenu(graphics, mouseX, mouseY);
   }
 
   @Override
-  protected void keyTyped(char typedChar, int keyCode) throws IOException {
+  public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
     if (capturingBind) {
       keybind.captureKeyboard(keyCode);
       capturingBind = false;
-      return;
+      return true;
     }
     if (expandedEnum != null) {
-      if (keyCode == Keyboard.KEY_ESCAPE) {
+      if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
         expandedEnum = null;
       }
-      return;
+      return true;
     }
     if (editing != null) {
-      if (keyCode == Keyboard.KEY_ESCAPE) {
+      if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
         editing = null;
         editor.setLength(0);
         editorError = false;
-      } else if (keyCode == Keyboard.KEY_RETURN || keyCode == Keyboard.KEY_NUMPADENTER) {
+      } else if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
         commitEditor();
       } else {
-        editorCursor = editBuffer(editor, editorCursor, typedChar, keyCode);
+        editorCursor = editBuffer(editor, editorCursor, '\0', keyCode);
         editorError = false;
       }
-      return;
+      return true;
     }
     if (searchFocused) {
-      if (keyCode == Keyboard.KEY_ESCAPE) {
+      if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
         if (search.length() > 0) {
           search.setLength(0);
           searchCursor = 0;
@@ -124,73 +126,96 @@ public class ClickGui extends GuiScreen implements Globals {
           searchFocused = false;
         }
       } else {
-        searchCursor = editBuffer(search, searchCursor, typedChar, keyCode);
+        searchCursor = editBuffer(search, searchCursor, '\0', keyCode);
         applySearch();
       }
-      return;
+      return true;
     }
-    if (keyCode == Keyboard.KEY_ESCAPE) {
-      MC.displayGuiScreen(null);
+    if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+      MC.setScreen(null);
+      return true;
     }
+    return super.keyPressed(keyCode, scanCode, modifiers);
   }
 
   @Override
-  protected void mouseClicked(int mouseX, int mouseY, int mouseButton) throws IOException {
+  public boolean charTyped(char typedChar, int modifiers) {
+    if (editing != null) {
+      if (SharedConstants.isAllowedChatCharacter(typedChar)) {
+        editorCursor = editBuffer(editor, editorCursor, typedChar, -1);
+        editorError = false;
+      }
+      return true;
+    }
+    if (searchFocused) {
+      if (SharedConstants.isAllowedChatCharacter(typedChar)) {
+        searchCursor = editBuffer(search, searchCursor, typedChar, -1);
+        applySearch();
+      }
+      return true;
+    }
+    return super.charTyped(typedChar, modifiers);
+  }
+
+  @Override
+  public boolean mouseClicked(double mouseX, double mouseY, int mouseButton) {
+    int x = (int) mouseX;
+    int y = (int) mouseY;
     if (capturingBind) {
       keybind.captureMouse(mouseButton);
       capturingBind = false;
-      return;
+      return true;
     }
-    if (closeBox.contains(mouseX, mouseY)) {
-      MC.displayGuiScreen(null);
-      return;
+    if (closeBox.contains(x, y)) {
+      MC.setScreen(null);
+      return true;
     }
     if (expandedEnum != null) {
       GuiRect menu = enumMenuBox(expandedEnum);
-      if (menu.contains(mouseX, mouseY)) {
-        int option = (mouseY - menu.getY()) / CONTROL_H;
+      if (menu.contains(x, y)) {
+        int option = (y - menu.getY()) / CONTROL_H;
         Enum<?>[] values = expandedEnum.getEnumValues();
         if (option >= 0 && option < values.length) {
           expandedEnum.setEnum(values[option]);
         }
         expandedEnum = null;
-        return;
+        return true;
       }
       expandedEnum = null;
     }
-    if (searchBox.contains(mouseX, mouseY)) {
+    if (searchBox.contains(x, y)) {
       if (editing != null && !commitEditor()) {
-        return;
+        return true;
       }
       searchFocused = true;
       searchCursor = search.length();
-      return;
+      return true;
     }
     searchFocused = false;
-    if (!geometry.contains(mouseX, mouseY)) {
-      return;
+    if (!geometry.contains(x, y)) {
+      return true;
     }
     if (editing != null) {
-      if (editableBox(editing).contains(mouseX, mouseY)) {
-        return;
+      if (editableBox(editing).contains(x, y)) {
+        return true;
       }
       if (!commitEditor()) {
-        return;
+        return true;
       }
     }
-    if (moduleList.contains(mouseX, mouseY)) {
+    if (moduleList.contains(x, y)) {
       BaseMod before = selected;
-      sidebar.selectAt(mouseX, mouseY);
+      sidebar.selectAt(x, y);
       selected = sidebar.getSelected();
       if (before != selected) {
         rebuildControls();
       }
-      return;
+      return true;
     }
     if (selected == null) {
-      return;
+      return true;
     }
-    if (toggleBox().contains(mouseX, mouseY)) {
+    if (toggleBox().contains(x, y)) {
       if (selected.isEnabled()) {
         selected.disable();
       } else {
@@ -200,44 +225,45 @@ public class ClickGui extends GuiScreen implements Globals {
       if (enabled != null) {
         enabled.serialize();
       }
-      return;
+      return true;
     }
-    if (keybind != null && keybind.isAvailable() && bindBox().contains(mouseX, mouseY)) {
+    if (keybind != null && keybind.isAvailable() && bindBox().contains(x, y)) {
       clearEditors();
       capturingBind = true;
-      return;
+      return true;
     }
-    SettingControl control = controlAt(mouseY);
+    SettingControl control = controlAt(y);
     if (control == null) {
-      return;
+      return true;
     }
     int rowY = rowY(control);
-    if (control.isModified() && resetBox(rowY).contains(mouseX, mouseY)) {
+    if (control.isModified() && resetBox(rowY).contains(x, y)) {
       control.reset();
-      return;
+      return true;
     }
     GuiRect rect = controlBox(rowY);
-    if (control.isBoolean() && rect.contains(mouseX, mouseY)) {
+    if (control.isBoolean() && rect.contains(x, y)) {
       control.setBoolean(!Boolean.TRUE.equals(control.getValue()));
-    } else if (control.isEnum() && rect.contains(mouseX, mouseY)) {
+    } else if (control.isEnum() && rect.contains(x, y)) {
       expandedEnum = control;
-    } else if (control.isNumber() && control.hasSlider() && sliderBox(rowY).contains(mouseX, mouseY)) {
+    } else if (control.isNumber() && control.hasSlider() && sliderBox(rowY).contains(x, y)) {
       draggingSlider = control;
-      setSliderFromMouse(control, mouseX);
-    } else if (editableBox(control).contains(mouseX, mouseY)) {
+      setSliderFromMouse(control, x);
+    } else if (editableBox(control).contains(x, y)) {
       beginEditor(control);
     }
+    return true;
   }
 
   @Override
-  protected void mouseReleased(int mouseX, int mouseY, int state) {
+  public boolean mouseReleased(double mouseX, double mouseY, int state) {
     draggingSlider = null;
-    super.mouseReleased(mouseX, mouseY, state);
+    return super.mouseReleased(mouseX, mouseY, state);
   }
 
   @Override
-  public void initGui() {
-    Keyboard.enableRepeatEvents(true);
+  protected void init() {
+    super.init();
     search.setLength(0);
     searchCursor = 0;
     searchFocused = false;
@@ -253,33 +279,32 @@ public class ClickGui extends GuiScreen implements Globals {
   }
 
   @Override
-  public void handleMouseInput() throws IOException {
-    super.handleMouseInput();
-    int wheel = Mouse.getEventDWheel();
-    if (wheel == 0) {
-      return;
+  public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+    if (delta == 0) {
+      return super.mouseScrolled(mouseX, mouseY, delta);
     }
-    int mouseX = Mouse.getEventX() * width / MC.displayWidth;
-    int mouseY = height - Mouse.getEventY() * height / MC.displayHeight - 1;
-    int direction = wheel < 0 ? 1 : -1;
-    if (moduleList.contains(mouseX, mouseY)) {
+    int direction = delta < 0 ? 1 : -1;
+    int x = (int) mouseX;
+    int y = (int) mouseY;
+    if (moduleList.contains(x, y)) {
       sidebar.scrollRows(direction * 3);
-    } else if (settingsView.contains(mouseX, mouseY)) {
+    } else if (settingsView.contains(x, y)) {
       settingsScroll.scrollBy(direction * ROW_H * 2);
       expandedEnum = null;
     }
+    return true;
   }
 
   @Override
-  public void onGuiClosed() {
+  public void onClose() {
     commitEditor();
     clearEditors();
     searchFocused = false;
-    Keyboard.enableRepeatEvents(false);
+    super.onClose();
   }
 
   @Override
-  public boolean doesGuiPauseGame() {
+  public boolean isPauseScreen() {
     return false;
   }
 
@@ -300,83 +325,83 @@ public class ClickGui extends GuiScreen implements Globals {
 
   private void drawTopBar(int mouseX, int mouseY) {
     GuiRect header = geometry.getHeader();
-    SurfaceHelper.drawRect(header.getX(), header.getY(), header.getWidth(), header.getHeight(), GuiPalette.SURFACE);
-    SurfaceHelper.drawRect(header.getX(), header.getBottom() - 1, header.getWidth(), 1, GuiPalette.DIVIDER);
-    SurfaceHelper.drawText("ForgeHax", header.getX() + 12, header.getY() + 12, GuiPalette.TEXT);
+    drawRect(header.getX(), header.getY(), header.getWidth(), header.getHeight(), GuiPalette.SURFACE);
+    drawRect(header.getX(), header.getBottom() - 1, header.getWidth(), 1, GuiPalette.DIVIDER);
+    drawText("ForgeHax", header.getX() + 12, header.getY() + 12, GuiPalette.TEXT);
     if (closeBox.contains(mouseX, mouseY)) {
-      SurfaceHelper.drawRect(closeBox.getX(), closeBox.getY(), closeBox.getWidth(), closeBox.getHeight(), GuiPalette.HOVER);
+      drawRect(closeBox.getX(), closeBox.getY(), closeBox.getWidth(), closeBox.getHeight(), GuiPalette.HOVER);
     }
-    SurfaceHelper.drawText(
-        "x", closeBox.getX() + (closeBox.getWidth() - SurfaceHelper.getTextWidth("x")) / 2,
+    drawText(
+        "x", closeBox.getX() + (closeBox.getWidth() - textWidth("x")) / 2,
         closeBox.getY() + 8, GuiPalette.TEXT_MUTED
     );
   }
 
   private void drawSearch() {
-    SurfaceHelper.drawRect(searchBox.getX(), searchBox.getY(), searchBox.getWidth(), searchBox.getHeight(), GuiPalette.SURFACE);
+    drawRect(searchBox.getX(), searchBox.getY(), searchBox.getWidth(), searchBox.getHeight(), GuiPalette.SURFACE);
     border(searchBox, searchFocused ? GuiPalette.ACCENT : GuiPalette.DIVIDER);
     String value = search.length() == 0 && !searchFocused ? "Search modules..." : search.toString();
     if (searchFocused) {
       value = value.substring(0, searchCursor) + "|" + value.substring(searchCursor);
     }
-    SurfaceHelper.drawText(
+    drawText(
         fitEnd(value, searchBox.getWidth() - 12), searchBox.getX() + 6,
         searchBox.getY() + 7, search.length() == 0 ? GuiPalette.TEXT_MUTED : GuiPalette.TEXT
     );
   }
 
   private void drawModuleHeader(int mouseX, int mouseY) {
-    SurfaceHelper.drawRect(moduleHeader.getX(), moduleHeader.getY(), moduleHeader.getWidth(), moduleHeader.getHeight(), GuiPalette.MODAL);
-    SurfaceHelper.drawRect(moduleHeader.getX(), moduleHeader.getBottom() - 1, moduleHeader.getWidth(), 1, GuiPalette.DIVIDER);
+    drawRect(moduleHeader.getX(), moduleHeader.getY(), moduleHeader.getWidth(), moduleHeader.getHeight(), GuiPalette.MODAL);
+    drawRect(moduleHeader.getX(), moduleHeader.getBottom() - 1, moduleHeader.getWidth(), 1, GuiPalette.DIVIDER);
     if (selected == null) {
-      SurfaceHelper.drawText("Select a module", moduleHeader.getX() + 12, moduleHeader.getY() + 14, GuiPalette.TEXT_MUTED);
+      drawText("Select a module", moduleHeader.getX() + 12, moduleHeader.getY() + 14, GuiPalette.TEXT_MUTED);
       return;
     }
     GuiRect toggle = toggleBox();
-    SurfaceHelper.drawText(
+    drawText(
         fit(selected.getModName(), Math.max(0, toggle.getX() - moduleHeader.getX() - 24)),
         moduleHeader.getX() + 12, moduleHeader.getY() + 13, GuiPalette.TEXT
     );
-    SurfaceHelper.drawText(
+    drawText(
         fit(selected.getModDescription(), Math.max(0, moduleHeader.getWidth() - 148)),
         moduleHeader.getX() + 12, moduleHeader.getY() + 31, GuiPalette.TEXT_MUTED
     );
-    SurfaceHelper.drawRect(
+    drawRect(
         toggle.getX(), toggle.getY(), toggle.getWidth(), toggle.getHeight(),
         selected.isEnabled() ? GuiPalette.ACCENT : GuiPalette.SURFACE
     );
     border(toggle, selected.isEnabled() ? GuiPalette.ACCENT : GuiPalette.DIVIDER);
-    SurfaceHelper.drawText(selected.isEnabled() ? "ON" : "OFF", toggle.getX() + 15, toggle.getY() + 7, GuiPalette.TEXT);
+    drawText(selected.isEnabled() ? "ON" : "OFF", toggle.getX() + 15, toggle.getY() + 7, GuiPalette.TEXT);
 
-    SurfaceHelper.drawText("Keybind", moduleHeader.getX() + 12, moduleHeader.getY() + 56, GuiPalette.TEXT_MUTED);
+    drawText("Keybind", moduleHeader.getX() + 12, moduleHeader.getY() + 56, GuiPalette.TEXT_MUTED);
     if (keybind != null && keybind.isAvailable()) {
       GuiRect bind = bindBox();
-      SurfaceHelper.drawRect(bind.getX(), bind.getY(), bind.getWidth(), bind.getHeight(), GuiPalette.SURFACE);
+      drawRect(bind.getX(), bind.getY(), bind.getWidth(), bind.getHeight(), GuiPalette.SURFACE);
       border(bind, capturingBind ? GuiPalette.ACCENT : GuiPalette.DIVIDER);
       String label = capturingBind ? "Press a key..." : keybind.getDisplayName();
-      SurfaceHelper.drawText(fit(label, bind.getWidth() - 10), bind.getX() + 5, bind.getY() + 7, GuiPalette.TEXT);
+      drawText(fit(label, bind.getWidth() - 10), bind.getX() + 5, bind.getY() + 7, GuiPalette.TEXT);
     } else {
-      SurfaceHelper.drawText("Unavailable", moduleHeader.getX() + 64, moduleHeader.getY() + 56, GuiPalette.TEXT_MUTED);
+      drawText("Unavailable", moduleHeader.getX() + 64, moduleHeader.getY() + 56, GuiPalette.TEXT_MUTED);
     }
   }
 
-  private void drawSettings(int mouseX, int mouseY) {
-    SurfaceHelper.drawRect(settingsView.getX(), settingsView.getY(), settingsView.getWidth(), settingsView.getHeight(), GuiPalette.MODAL);
+  private void drawSettings(GuiGraphics graphics, int mouseX, int mouseY) {
+    drawRect(settingsView.getX(), settingsView.getY(), settingsView.getWidth(), settingsView.getHeight(), GuiPalette.MODAL);
     updateSettingsExtent();
     if (settingsView.getWidth() <= 0 || settingsView.getHeight() <= 0) {
       return;
     }
-    try (GuiScissor.Clip ignored = GuiScissor.begin(settingsView, new ScaledResolution(MC))) {
+    try (GuiScissor.Clip ignored = GuiScissor.begin(graphics, settingsView)) {
       int firstY = settingsView.getY() - settingsScroll.getOffset();
       for (int i = 0; i < controls.size(); i++) {
         drawSettingRow(controls.get(i), firstY + i * ROW_H, mouseX, mouseY);
       }
       int footerY = firstY + controls.size() * ROW_H + 12;
       if (controls.isEmpty() && selected != null) {
-        SurfaceHelper.drawText("No editable settings", settingsView.getX() + 12, footerY, GuiPalette.TEXT_MUTED);
+        drawText("No editable settings", settingsView.getX() + 12, footerY, GuiPalette.TEXT_MUTED);
       }
       if (cliOnly) {
-        SurfaceHelper.drawText(
+        drawText(
             "Additional actions remain available in the CLI.", settingsView.getX() + 12,
             footerY + (controls.isEmpty() ? 18 : 0), GuiPalette.TEXT_MUTED
         );
@@ -389,16 +414,16 @@ public class ClickGui extends GuiScreen implements Globals {
       return;
     }
     if (mouseX >= settingsView.getX() && mouseX < settingsView.getRight() && mouseY >= rowY && mouseY < rowY + ROW_H) {
-      SurfaceHelper.drawRect(settingsView.getX(), rowY, settingsView.getWidth(), ROW_H, GuiPalette.HOVER);
+      drawRect(settingsView.getX(), rowY, settingsView.getWidth(), ROW_H, GuiPalette.HOVER);
     }
-    SurfaceHelper.drawRect(settingsView.getX() + 10, rowY + ROW_H - 1, Math.max(0, settingsView.getWidth() - 20), 1, GuiPalette.DIVIDER);
+    drawRect(settingsView.getX() + 10, rowY + ROW_H - 1, Math.max(0, settingsView.getWidth() - 20), 1, GuiPalette.DIVIDER);
     GuiRect controlRect = controlBox(rowY);
     int labelWidth = Math.max(0, resetBox(rowY).getX() - settingsView.getX() - 20);
-    SurfaceHelper.drawText(fit(settingLabel(control), labelWidth), settingsView.getX() + 12, rowY + 9, GuiPalette.TEXT);
-    SurfaceHelper.drawText(fit(control.getDescription(), labelWidth), settingsView.getX() + 12, rowY + 25, GuiPalette.TEXT_MUTED);
+    drawText(fit(settingLabel(control), labelWidth), settingsView.getX() + 12, rowY + 9, GuiPalette.TEXT);
+    drawText(fit(control.getDescription(), labelWidth), settingsView.getX() + 12, rowY + 25, GuiPalette.TEXT_MUTED);
     if (control.isModified()) {
       GuiRect reset = resetBox(rowY);
-      SurfaceHelper.drawText("R", reset.getX() + 5, reset.getY() + 5, GuiPalette.ACCENT);
+      drawText("R", reset.getX() + 5, reset.getY() + 5, GuiPalette.ACCENT);
     }
     if (control.isBoolean()) {
       drawBoolean(control, controlRect);
@@ -414,21 +439,21 @@ public class ClickGui extends GuiScreen implements Globals {
   private void drawBoolean(SettingControl control, GuiRect rect) {
     rect = new GuiRect(rect.getRight() - 38, rect.getY(), 38, rect.getHeight());
     boolean active = Boolean.TRUE.equals(control.getValue());
-    SurfaceHelper.drawRect(
+    drawRect(
         rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(),
         active ? GuiPalette.ACCENT : GuiPalette.SURFACE
     );
     border(rect, active ? GuiPalette.ACCENT : GuiPalette.DIVIDER);
     int knob = Math.max(6, rect.getHeight() - 6);
     int knobX = active ? rect.getRight() - knob - 3 : rect.getX() + 3;
-    SurfaceHelper.drawRect(knobX, rect.getY() + 3, knob, knob, GuiPalette.TEXT);
+    drawRect(knobX, rect.getY() + 3, knob, knob, GuiPalette.TEXT);
   }
 
   private void drawEnum(SettingControl control, GuiRect rect) {
-    SurfaceHelper.drawRect(rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), GuiPalette.SURFACE);
+    drawRect(rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), GuiPalette.SURFACE);
     border(rect, expandedEnum == control ? GuiPalette.ACCENT : GuiPalette.DIVIDER);
-    SurfaceHelper.drawText(fit(control.getValueText(), rect.getWidth() - 20), rect.getX() + 5, rect.getY() + 6, GuiPalette.TEXT);
-    SurfaceHelper.drawText("v", rect.getRight() - 12, rect.getY() + 6, GuiPalette.TEXT_MUTED);
+    drawText(fit(control.getValueText(), rect.getWidth() - 20), rect.getX() + 5, rect.getY() + 6, GuiPalette.TEXT);
+    drawText("v", rect.getRight() - 12, rect.getY() + 6, GuiPalette.TEXT_MUTED);
   }
 
   private void drawNumber(SettingControl control, GuiRect rect, int rowY) {
@@ -438,29 +463,29 @@ public class ClickGui extends GuiScreen implements Globals {
     }
     GuiRect slider = sliderBox(rowY);
     GuiRect value = numberBox(rowY);
-    SurfaceHelper.drawRect(slider.getX(), slider.getY() + slider.getHeight() / 2 - 1, slider.getWidth(), 2, GuiPalette.DIVIDER);
+    drawRect(slider.getX(), slider.getY() + slider.getHeight() / 2 - 1, slider.getWidth(), 2, GuiPalette.DIVIDER);
     int fill = (int) Math.round(slider.getWidth() * control.getSliderFraction());
-    SurfaceHelper.drawRect(slider.getX(), slider.getY() + slider.getHeight() / 2 - 1, fill, 2, GuiPalette.ACCENT);
+    drawRect(slider.getX(), slider.getY() + slider.getHeight() / 2 - 1, fill, 2, GuiPalette.ACCENT);
     int knobX = Math.max(slider.getX(), Math.min(slider.getRight() - 4, slider.getX() + fill - 2));
-    SurfaceHelper.drawRect(knobX, slider.getY() + 4, 4, Math.max(4, slider.getHeight() - 8), GuiPalette.ACCENT);
+    drawRect(knobX, slider.getY() + 4, 4, Math.max(4, slider.getHeight() - 8), GuiPalette.ACCENT);
     drawTextField(control, value);
   }
 
   private void drawTextField(SettingControl control, GuiRect rect) {
-    SurfaceHelper.drawRect(rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), GuiPalette.SURFACE);
+    drawRect(rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), GuiPalette.SURFACE);
     int color = editing == control ? (editorError ? ERROR : GuiPalette.ACCENT) : GuiPalette.DIVIDER;
     border(rect, color);
     String value = control.getDisplayValueText();
     if (editing == control) {
       value = editor.substring(0, editorCursor) + "|" + editor.substring(editorCursor);
     }
-    SurfaceHelper.drawText(
+    drawText(
         fitEnd(value, rect.getWidth() - 10), rect.getX() + 5, rect.getY() + 6,
         editorError && editing == control ? ERROR : GuiPalette.TEXT
     );
   }
 
-  private void drawEnumMenu(int mouseX, int mouseY) {
+  private void drawEnumMenu(GuiGraphics graphics, int mouseX, int mouseY) {
     if (expandedEnum == null) {
       return;
     }
@@ -469,15 +494,15 @@ public class ClickGui extends GuiScreen implements Globals {
     if (menu.getWidth() <= 0 || menu.getHeight() <= 0) {
       return;
     }
-    try (GuiScissor.Clip ignored = GuiScissor.begin(settingsView, new ScaledResolution(MC))) {
-      SurfaceHelper.drawRect(menu.getX(), menu.getY(), menu.getWidth(), menu.getHeight(), GuiPalette.SURFACE);
+    try (GuiScissor.Clip ignored = GuiScissor.begin(graphics, settingsView)) {
+      drawRect(menu.getX(), menu.getY(), menu.getWidth(), menu.getHeight(), GuiPalette.SURFACE);
       border(menu, GuiPalette.DIVIDER);
       for (int i = 0; i < values.length; i++) {
         int y = menu.getY() + i * CONTROL_H;
         if (mouseX >= menu.getX() && mouseX < menu.getRight() && mouseY >= y && mouseY < y + CONTROL_H) {
-          SurfaceHelper.drawRect(menu.getX() + 1, y, Math.max(0, menu.getWidth() - 2), CONTROL_H, GuiPalette.HOVER);
+          drawRect(menu.getX() + 1, y, Math.max(0, menu.getWidth() - 2), CONTROL_H, GuiPalette.HOVER);
         }
-        SurfaceHelper.drawText(
+        drawText(
             fit(values[i].name(), menu.getWidth() - 10), menu.getX() + 5, y + 6,
             values[i].equals(expandedEnum.getValue()) ? GuiPalette.ACCENT : GuiPalette.TEXT
         );
@@ -486,39 +511,39 @@ public class ClickGui extends GuiScreen implements Globals {
   }
 
   private int editBuffer(StringBuilder buffer, int cursor, char typedChar, int keyCode) {
-    if (keyCode == Keyboard.KEY_LEFT) {
+    if (keyCode == GLFW.GLFW_KEY_LEFT) {
       return Math.max(0, cursor - 1);
     }
-    if (keyCode == Keyboard.KEY_RIGHT) {
+    if (keyCode == GLFW.GLFW_KEY_RIGHT) {
       return Math.min(buffer.length(), cursor + 1);
     }
-    if (keyCode == Keyboard.KEY_HOME) {
+    if (keyCode == GLFW.GLFW_KEY_HOME) {
       return 0;
     }
-    if (keyCode == Keyboard.KEY_END) {
+    if (keyCode == GLFW.GLFW_KEY_END) {
       return buffer.length();
     }
-    if (keyCode == Keyboard.KEY_BACK && cursor > 0) {
+    if (keyCode == GLFW.GLFW_KEY_BACKSPACE && cursor > 0) {
       buffer.deleteCharAt(cursor - 1);
       return cursor - 1;
     }
-    if (keyCode == Keyboard.KEY_DELETE && cursor < buffer.length()) {
+    if (keyCode == GLFW.GLFW_KEY_DELETE && cursor < buffer.length()) {
       buffer.deleteCharAt(cursor);
       return cursor;
     }
-    if (isCtrlKeyDown() && keyCode == Keyboard.KEY_V) {
-      String clipboard = getClipboardString();
+    if (hasControlDown() && keyCode == GLFW.GLFW_KEY_V) {
+      String clipboard = MC.keyboardHandler.getClipboard();
       if (clipboard != null) {
         for (int i = 0; i < clipboard.length(); i++) {
           char value = clipboard.charAt(i);
-          if (ChatAllowedCharacters.isAllowedCharacter(value)) {
+          if (SharedConstants.isAllowedChatCharacter(value)) {
             buffer.insert(cursor++, value);
           }
         }
       }
       return cursor;
     }
-    if (ChatAllowedCharacters.isAllowedCharacter(typedChar)) {
+    if (SharedConstants.isAllowedChatCharacter(typedChar)) {
       buffer.insert(cursor, typedChar);
       return cursor + 1;
     }
@@ -683,7 +708,7 @@ public class ClickGui extends GuiScreen implements Globals {
 
   private String fit(String value, int width) {
     String safe = value == null ? "" : value;
-    return width <= 0 ? "" : MC.fontRenderer.trimStringToWidth(safe, width);
+    return width <= 0 ? "" : MC.font.plainSubstrByWidth(safe, width);
   }
 
   private String fitEnd(String value, int width) {
@@ -691,19 +716,35 @@ public class ClickGui extends GuiScreen implements Globals {
     if (width <= 0) {
       return "";
     }
-    while (safe.length() > 0 && SurfaceHelper.getTextWidth(safe) > width) {
+    while (safe.length() > 0 && textWidth(safe) > width) {
       safe = safe.substring(1);
     }
     return safe;
+  }
+
+  private void drawRect(int x, int y, int width, int height, int color) {
+    if (graphics != null && width > 0 && height > 0) {
+      graphics.fill(x, y, x + width, y + height, color);
+    }
+  }
+
+  private void drawText(String value, int x, int y, int color) {
+    if (graphics != null) {
+      graphics.drawString(MC.font, value, x, y, color);
+    }
+  }
+
+  private int textWidth(String value) {
+    return MC.font.width(value);
   }
 
   private void border(GuiRect rect, int color) {
     if (rect.getWidth() <= 0 || rect.getHeight() <= 0) {
       return;
     }
-    SurfaceHelper.drawRect(rect.getX(), rect.getY(), rect.getWidth(), 1, color);
-    SurfaceHelper.drawRect(rect.getX(), rect.getBottom() - 1, rect.getWidth(), 1, color);
-    SurfaceHelper.drawRect(rect.getX(), rect.getY(), 1, rect.getHeight(), color);
-    SurfaceHelper.drawRect(rect.getRight() - 1, rect.getY(), 1, rect.getHeight(), color);
+    drawRect(rect.getX(), rect.getY(), rect.getWidth(), 1, color);
+    drawRect(rect.getX(), rect.getBottom() - 1, rect.getWidth(), 1, color);
+    drawRect(rect.getX(), rect.getY(), 1, rect.getHeight(), color);
+    drawRect(rect.getRight() - 1, rect.getY(), 1, rect.getHeight(), color);
   }
 }

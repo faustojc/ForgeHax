@@ -8,7 +8,7 @@ import com.matt.forgehax.util.mod.ServiceMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
 import com.matt.forgehax.util.spam.SpamMessage;
 import joptsimple.internal.Strings;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import java.util.List;
 import java.util.Map;
@@ -105,7 +105,7 @@ public class SpamService extends ServiceMod {
           .findFirst()
           .ifPresent(
               msg -> {
-                getLocalPlayer().sendChatMessage(msg.getMessage());
+                getLocalPlayer().connection.sendChat(msg.getMessage());
                 customDelays
                     .computeIfAbsent(msg.getType(), t -> new AtomicLong(0L))
                     .set(System.currentTimeMillis() + msg.getDelay());

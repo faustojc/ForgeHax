@@ -7,18 +7,17 @@ import com.matt.forgehax.util.FileManager;
 import com.matt.forgehax.util.command.CommandGlobal;
 import com.matt.forgehax.util.mod.loader.ModManager;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.entity.EntityPlayerSP;
-import net.minecraft.client.multiplayer.PlayerControllerMP;
-import net.minecraft.client.multiplayer.WorldClient;
-import net.minecraft.entity.Entity;
-import net.minecraft.network.NetworkManager;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.text.ITextComponent;
-import net.minecraft.util.text.Style;
-import net.minecraft.util.text.TextComponentString;
-import net.minecraft.util.text.TextFormatting;
-import net.minecraft.world.World;
-import net.minecraftforge.fml.client.FMLClientHandler;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.multiplayer.MultiPlayerGameMode;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.Connection;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import org.apache.logging.log4j.Logger;
 
 import javax.annotation.Nullable;
@@ -51,20 +50,18 @@ public class Helper implements Globals {
   }
 
   public static Entity getRenderEntity() {
-    return MC.getRenderViewEntity();
+    return MC.getCameraEntity();
   }
 
-  public static EntityPlayerSP getLocalPlayer() {
+  @Nullable
+  public static LocalPlayer getLocalPlayer() {
     return MC.player;
   }
 
   @Nullable
   public static Entity getRidingEntity() {
-    if (getLocalPlayer() != null) {
-      return getLocalPlayer().getRidingEntity();
-    } else {
-      return null;
-    }
+    LocalPlayer player = getLocalPlayer();
+    return player == null ? null : player.getVehicle();
   }
 
   public static Optional<Entity> getOptionalRidingEntity() {
@@ -74,29 +71,31 @@ public class Helper implements Globals {
   // Returns the riding entity if present, otherwise the local player
   @Nullable
   public static Entity getRidingOrPlayer() {
-    return getRidingEntity() != null ? getRidingEntity() : getLocalPlayer();
+    Entity riding = getRidingEntity();
+    return riding != null ? riding : getLocalPlayer();
   }
 
   @Nullable
-  public static WorldClient getWorld() {
-    return MC.world;
+  public static ClientLevel getWorld() {
+    return MC.level;
   }
 
-  public static World getWorld(Entity entity) {
-    return entity.getEntityWorld();
+  public static Level getWorld(Entity entity) {
+    return entity.level();
   }
 
-  public static World getWorld(TileEntity tileEntity) {
-    return tileEntity.getWorld();
+  public static Level getWorld(BlockEntity blockEntity) {
+    return blockEntity.getLevel();
   }
 
   @Nullable
-  public static NetworkManager getNetworkManager() {
-    return FMLClientHandler.instance().getClientToServerNetworkManager();
+  public static Connection getNetworkManager() {
+    return MC.getConnection() == null ? null : MC.getConnection().getConnection();
   }
 
-  public static PlayerControllerMP getPlayerController() {
-    return MC.playerController;
+  @Nullable
+  public static MultiPlayerGameMode getPlayerController() {
+    return MC.gameMode;
   }
 
   public static void printMessageNaked(
@@ -114,21 +113,22 @@ public class Helper implements Globals {
           s1 = s2;
           s2 = cpy;
         }
+        scanner.close();
       } else {
-        TextComponentString string =
-            new TextComponentString(startWith + message.replaceAll("\r", ""));
-        string.setStyle(firstStyle);
-        outputMessage(string.getFormattedText());
+        Component text = Component.literal(startWith + message.replace("\r", ""))
+            .withStyle(firstStyle);
+        outputMessage(text);
       }
     }
   }
 
   // private function that is ultimately used to output the message
-  private static void outputMessage(String text) {
-    if (getLocalPlayer() != null) {
-      getLocalPlayer().sendMessage(new TextComponentString(text));
-    } else if (MC.currentScreen instanceof CommandInputGui) {
-      ((CommandInputGui) MC.currentScreen).print(text);
+  private static void outputMessage(Component message) {
+    LocalPlayer player = getLocalPlayer();
+    if (player != null) {
+      player.displayClientMessage(message, false);
+    } else if (MC.screen instanceof CommandInputGui) {
+      ((CommandInputGui) MC.screen).print(message.getString());
     }
   }
 
@@ -140,8 +140,8 @@ public class Helper implements Globals {
     printMessageNaked(
         append,
         message,
-        new Style().setColor(TextFormatting.WHITE),
-        new Style().setColor(TextFormatting.GRAY)
+        Style.EMPTY.withColor(ChatFormatting.WHITE),
+        Style.EMPTY.withColor(ChatFormatting.GRAY)
     );
   }
 
@@ -160,51 +160,41 @@ public class Helper implements Globals {
     printMessage(String.format(format, args));
   }
 
-  private static ITextComponent getFormattedText(
-      String text, TextFormatting color,
+  private static MutableComponent getFormattedText(
+      String text, ChatFormatting color,
       boolean bold, boolean italic
   ) {
-    return new TextComponentString(text.replaceAll("\r", ""))
-        .setStyle(new Style()
-            .setColor(color)
-            .setBold(bold)
-            .setItalic(italic)
-        );
+    return Component.literal(text.replace("\r", ""))
+        .withStyle(Style.EMPTY.withColor(color).withBold(bold).withItalic(italic));
   }
 
   public static void printInform(String format, Object... args) {
     outputMessage(
-        getFormattedText("[ForgeHax]", TextFormatting.GREEN, true, false)
-            .appendSibling(
-                getFormattedText(
-                    " " + String.format(format, args).trim(),
-                    TextFormatting.GRAY, false, false
-                )
-            ).getFormattedText()
+        getFormattedText("[ForgeHax]", ChatFormatting.GREEN, true, false)
+            .append(getFormattedText(
+                " " + String.format(format, args).trim(),
+                ChatFormatting.GRAY, false, false
+            ))
     );
   }
 
   public static void printWarning(String format, Object... args) {
     outputMessage(
-        getFormattedText("[ForgeHax]", TextFormatting.YELLOW, true, false)
-            .appendSibling(
-                getFormattedText(
-                    " " + String.format(format, args).trim(),
-                    TextFormatting.GRAY, false, false
-                )
-            ).getFormattedText()
+        getFormattedText("[ForgeHax]", ChatFormatting.YELLOW, true, false)
+            .append(getFormattedText(
+                " " + String.format(format, args).trim(),
+                ChatFormatting.GRAY, false, false
+            ))
     );
   }
 
   public static void printError(String format, Object... args) {
     outputMessage(
-        getFormattedText("[ForgeHax]", TextFormatting.RED, true, false)
-            .appendSibling(
-                getFormattedText(
-                    " " + String.format(format, args).trim(),
-                    TextFormatting.GRAY, false, false
-                )
-            ).getFormattedText()
+        getFormattedText("[ForgeHax]", ChatFormatting.RED, true, false)
+            .append(getFormattedText(
+                " " + String.format(format, args).trim(),
+                ChatFormatting.GRAY, false, false
+            ))
     );
   }
 
@@ -226,28 +216,20 @@ public class Helper implements Globals {
   }
 
   public static void reloadChunks() {
-    // credits to 0x22
     if (getWorld() != null && getLocalPlayer() != null) {
-      MC.addScheduledTask(
-          () -> {
-            int x = (int) getLocalPlayer().posX;
-            int y = (int) getLocalPlayer().posY;
-            int z = (int) getLocalPlayer().posZ;
-
-            int distance = MC.gameSettings.renderDistanceChunks * 16;
-
-            MC.renderGlobal.markBlockRangeForRenderUpdate(
-                x - distance, y - distance, z - distance, x + distance, y + distance, z + distance);
-          });
+      MC.execute(() -> {
+        if (getWorld() != null && getLocalPlayer() != null) {
+          MC.levelRenderer.allChanged();
+        }
+      });
     }
   }
 
   public static void reloadChunksHard() {
-    MC.addScheduledTask(
-        () -> {
-          if (getWorld() != null && getLocalPlayer() != null) {
-            MC.renderGlobal.loadRenderers();
-          }
-        });
+    MC.execute(() -> {
+      if (getWorld() != null && getLocalPlayer() != null) {
+        MC.levelRenderer.allChanged();
+      }
+    });
   }
 }

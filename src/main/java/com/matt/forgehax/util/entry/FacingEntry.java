@@ -3,25 +3,25 @@ package com.matt.forgehax.util.entry;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import com.matt.forgehax.util.serialization.ISerializableJson;
-import net.minecraft.util.EnumFacing;
+import net.minecraft.core.Direction;
 
 import java.io.IOException;
 import java.util.Objects;
 
 public class FacingEntry implements ISerializableJson {
 
-  private final EnumFacing facing;
+  private final Direction facing;
 
-  public FacingEntry(EnumFacing facing) {
+  public FacingEntry(Direction facing) {
     Objects.requireNonNull(facing);
     this.facing = facing;
   }
 
   public FacingEntry(String str) {
-    this(EnumFacing.byName(str));
+    this(Direction.byName(str));
   }
 
-  public EnumFacing getFacing() {
+  public Direction getFacing() {
     return facing;
   }
 
@@ -41,11 +41,11 @@ public class FacingEntry implements ISerializableJson {
   public boolean equals(Object obj) {
     return this == obj
         || (obj instanceof FacingEntry && facing.equals(((FacingEntry) obj).getFacing()))
-        || (obj instanceof EnumFacing && facing.equals(obj));
+        || (obj instanceof Direction && facing.equals(obj));
   }
 
   @Override
   public String toString() {
-    return getFacing().getName2();
+    return getFacing().getSerializedName();
   }
 }

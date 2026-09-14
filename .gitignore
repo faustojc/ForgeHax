@@ -17,3 +17,6 @@ libs/journeymap*
 .gradle/
 graphify-out/
 logs/
+
+# Local Codex/agent instructions
+AGENTS.md

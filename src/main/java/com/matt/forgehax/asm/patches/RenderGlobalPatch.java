@@ -9,7 +9,7 @@ import com.matt.forgehax.asm.utils.transforming.Inject;
 import com.matt.forgehax.asm.utils.transforming.MethodTransformer;
 import com.matt.forgehax.asm.utils.transforming.RegisterMethodTransformer;
 import org.objectweb.asm.tree.*;
-import scala.tools.asm.Type;
+import org.objectweb.asm.Type;
 
 import java.util.Objects;
 

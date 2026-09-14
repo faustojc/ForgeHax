@@ -4,21 +4,21 @@ import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import net.minecraftforge.fml.common.gameevent.TickEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.event.TickEvent;
 
 @RegisterMod
 public class FullBrightMod extends ToggleMod {
 
-  private final Setting<Float> defaultGamma =
+  private final Setting<Double> defaultGamma =
       getCommandStub()
           .builders()
-          .<Float>newSettingBuilder()
+          .<Double>newSettingBuilder()
           .name("gamma")
           .description("default gamma to revert to")
-          .defaultTo(MC.gameSettings.gammaSetting)
-          .min(0.1F)
-          .max(16F)
+          .defaultTo(MC.options.gamma().get())
+          .min(0.1D)
+          .max(16D)
           .build();
 
   public FullBrightMod() {
@@ -27,16 +27,16 @@ public class FullBrightMod extends ToggleMod {
 
   @Override
   public void onEnabled() {
-    MC.gameSettings.gammaSetting = 16F;
+    MC.options.gamma().set(16D);
   }
 
   @Override
   public void onDisabled() {
-    MC.gameSettings.gammaSetting = defaultGamma.get();
+    MC.options.gamma().set(defaultGamma.get());
   }
 
   @SubscribeEvent
   public void onClientTick(TickEvent.ClientTickEvent event) {
-    MC.gameSettings.gammaSetting = 16F;
+    MC.options.gamma().set(16D);
   }
 }

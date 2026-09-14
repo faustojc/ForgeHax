@@ -4,65 +4,44 @@ import com.google.common.collect.Sets;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
 import com.google.gson.stream.JsonWriter;
-import net.minecraft.world.DimensionType;
-import net.minecraftforge.common.DimensionManager;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.Level;
 
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Iterator;
-import java.util.Objects;
 
 /**
  * Created on 5/23/2017 by fr1kin
+ *
+ * <p>TODO(1.20.1): dimensions were switched from integer ids to registry keys
+ * ({@code ResourceKey<Level>}, e.g. {@code Level.OVERWORLD}/{@code Level.NETHER}/
+ * {@code Level.END}) - there's no int-id lookup anymore.
  */
 public class DimensionProperty implements IBlockProperty {
 
   private static final String HEADING = "dimensions";
 
-  private final Collection<DimensionType> dimensions = Sets.newHashSet();
+  private final Collection<ResourceKey<Level>> dimensions = Sets.newHashSet();
 
-  private boolean add(DimensionType type) {
-    return type != null && dimensions.add(type);
+  public boolean add(ResourceKey<Level> dimension) {
+    return dimension != null && dimensions.add(dimension);
   }
 
-  public boolean add(int id) {
-    try {
-      return add(DimensionManager.getProviderType(id));
-    } catch (Exception e) {
-      // will throw exception if id does not exist
-      return false;
-    }
+  public boolean remove(ResourceKey<Level> dimension) {
+    return dimension != null && dimensions.remove(dimension);
   }
 
-  private boolean remove(DimensionType type) {
-    return type != null && dimensions.remove(type);
-  }
-
-  public boolean remove(int id) {
-    try {
-      return remove(DimensionManager.getProviderType(id));
-    } catch (Exception e) {
-      return false; // will throw exception if id does not exist
-    }
-  }
-
-  public boolean contains(int id) {
-    if (dimensions.isEmpty()) {
-      return true; // true if none other
-    } else {
-      try {
-        return dimensions.contains(DimensionManager.getProviderType(id));
-      } catch (Exception e) {
-        return false;
-      }
-    }
+  public boolean contains(ResourceKey<Level> dimension) {
+    return dimensions.isEmpty() || dimensions.contains(dimension); // true if none other
   }
 
   @Override
   public void serialize(JsonWriter writer) throws IOException {
     writer.beginArray();
-    for (DimensionType dimension : dimensions) {
-      writer.value(dimension.getName());
+    for (ResourceKey<Level> dimension : dimensions) {
+      writer.value(dimension.location().toString());
     }
     writer.endArray();
   }
@@ -72,13 +51,12 @@ public class DimensionProperty implements IBlockProperty {
     reader.beginArray();
     while (reader.hasNext() && reader.peek().equals(JsonToken.STRING)) {
       String dim = reader.nextString();
-      for (DimensionType type : DimensionType.values()) {
-        if (Objects.equals(type.getName(), dim)) {
-          add(type);
-          break;
-        }
+      ResourceLocation location = ResourceLocation.tryParse(dim);
+      if (location != null) {
+        add(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, location));
       }
     }
+    reader.endArray();
   }
 
   @Override
@@ -89,9 +67,9 @@ public class DimensionProperty implements IBlockProperty {
   @Override
   public String helpText() {
     final StringBuilder builder = new StringBuilder("{");
-    Iterator<DimensionType> it = dimensions.iterator();
+    Iterator<ResourceKey<Level>> it = dimensions.iterator();
     while (it.hasNext()) {
-      String name = it.next().getName();
+      String name = it.next().location().toString();
       builder.append(name);
       if (it.hasNext()) {
         builder.append(", ");
@@ -114,17 +92,17 @@ public class DimensionProperty implements IBlockProperty {
   private static class ImmutableDimension extends DimensionProperty {
 
     @Override
-    public boolean add(int id) {
+    public boolean add(ResourceKey<Level> dimension) {
       return false;
     }
 
     @Override
-    public boolean remove(int id) {
+    public boolean remove(ResourceKey<Level> dimension) {
       return false;
     }
 
     @Override
-    public boolean contains(int id) {
+    public boolean contains(ResourceKey<Level> dimension) {
       return true; // Allow ALL dimensions by default
     }
   }

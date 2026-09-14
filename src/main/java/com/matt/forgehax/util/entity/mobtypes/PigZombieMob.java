@@ -1,8 +1,8 @@
 package com.matt.forgehax.util.entity.mobtypes;
 
 import com.matt.forgehax.util.common.PriorityEnum;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.monster.EntityPigZombie;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.monster.ZombifiedPiglin;
 
 /**
  * Created on 6/27/2017 by fr1kin
@@ -16,12 +16,14 @@ public class PigZombieMob extends MobType {
 
   @Override
   public boolean isMobType(Entity entity) {
-    return entity instanceof EntityPigZombie;
+    return entity instanceof ZombifiedPiglin;
   }
 
   @Override
   protected MobTypeEnum getMobTypeUnchecked(Entity entity) {
-    EntityPigZombie zombie = (EntityPigZombie) entity;
-    return (zombie.isArmsRaised() || zombie.isAngry()) ? MobTypeEnum.HOSTILE : MobTypeEnum.NEUTRAL;
+    ZombifiedPiglin zombie = (ZombifiedPiglin) entity;
+    return (zombie.isAggressive() || zombie.getRemainingPersistentAngerTime() > 0)
+        ? MobTypeEnum.HOSTILE
+        : MobTypeEnum.NEUTRAL;
   }
 }

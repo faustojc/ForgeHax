@@ -1,7 +1,7 @@
 package com.matt.forgehax.util.command;
 
 import com.matt.forgehax.util.command.callbacks.CallbackData;
-import org.lwjgl.input.Keyboard;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.function.Consumer;
 
@@ -25,11 +25,11 @@ public class StubBuilder extends BaseCommandBuilder<StubBuilder, CommandStub> {
   }
 
   public StubBuilder bind() {
-    return bind(Keyboard.KEY_NONE);
+    return bind(InputConstants.UNKNOWN.getValue());
   }
 
   public StubBuilder nobind() {
-    return bind(-1);
+    return bind(CommandStub.NO_KEYBIND);
   }
 
   public StubBuilder bindOptions(boolean b) {

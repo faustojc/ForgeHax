@@ -1,10 +1,10 @@
 package com.matt.forgehax.asm.events;
 
-import net.minecraft.block.state.IBlockState;
-import net.minecraft.client.renderer.BufferBuilder;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.IBlockAccess;
-import net.minecraftforge.fml.common.eventhandler.Event;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.BlockAndTintGetter;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraftforge.eventbus.api.Event;
 
 /**
  * Created on 11/10/2016 by fr1kin
@@ -12,12 +12,12 @@ import net.minecraftforge.fml.common.eventhandler.Event;
 public class BlockRenderEvent extends Event {
 
   private final BlockPos pos;
-  private final IBlockState state;
-  private final IBlockAccess access;
+  private final BlockState state;
+  private final BlockAndTintGetter access;
   private final BufferBuilder buffer;
 
   public BlockRenderEvent(
-      BlockPos pos, IBlockState state, IBlockAccess access, BufferBuilder buffer) {
+      BlockPos pos, BlockState state, BlockAndTintGetter access, BufferBuilder buffer) {
     this.pos = pos;
     this.state = state;
     this.access = access;
@@ -28,11 +28,11 @@ public class BlockRenderEvent extends Event {
     return pos;
   }
 
-  public IBlockAccess getAccess() {
+  public BlockAndTintGetter getAccess() {
     return access;
   }
 
-  public IBlockState getState() {
+  public BlockState getState() {
     return state;
   }
 

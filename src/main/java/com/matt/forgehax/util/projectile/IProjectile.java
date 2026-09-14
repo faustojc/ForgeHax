@@ -1,6 +1,6 @@
 package com.matt.forgehax.util.projectile;
 
-import net.minecraft.item.Item;
+import net.minecraft.world.item.Item;
 
 /**
  * Created on 6/21/2017 by fr1kin

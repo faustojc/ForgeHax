@@ -1,21 +1,21 @@
 package com.matt.forgehax.asm.events;
 
-import net.minecraft.block.state.IBlockState;
-import net.minecraft.entity.EntityLivingBase;
-import net.minecraftforge.fml.common.eventhandler.Event;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraftforge.eventbus.api.Event;
 
 public class EntityBlockSlipApplyEvent extends Event {
 
   private final Stage stage;
-  private final EntityLivingBase entityLivingBase;
-  private final IBlockState blockStateUnder;
+  private final LivingEntity entityLivingBase;
+  private final BlockState blockStateUnder;
   private final float defaultSlipperiness;
   private float slipperiness;
 
   public EntityBlockSlipApplyEvent(
       Stage stage,
-      EntityLivingBase entityLivingBase,
-      IBlockState blockStateUnder,
+      LivingEntity entityLivingBase,
+      BlockState blockStateUnder,
       float defaultSlipperiness
   ) {
     this.stage = stage;
@@ -29,11 +29,11 @@ public class EntityBlockSlipApplyEvent extends Event {
     return stage;
   }
 
-  public EntityLivingBase getEntityLivingBase() {
+  public LivingEntity getEntityLivingBase() {
     return entityLivingBase;
   }
 
-  public IBlockState getBlockStateUnder() {
+  public BlockState getBlockStateUnder() {
     return blockStateUnder;
   }
 

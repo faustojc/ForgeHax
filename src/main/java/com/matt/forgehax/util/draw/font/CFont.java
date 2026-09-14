@@ -20,8 +20,18 @@ as the name is changed.
  * Created by Hexeption on 18/12/2016.
  */
 
+import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.Tesselator;
+import com.mojang.blaze3d.vertex.VertexFormat;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import org.lwjgl.opengl.GL11;
+import net.minecraft.util.FastColor;
+import org.joml.Matrix4f;
 
 import java.awt.*;
 import java.awt.geom.Rectangle2D;
@@ -50,12 +60,35 @@ public class CFont {
     BufferedImage img = generateFontImage(font, antiAlias, fractionalMetrics, chars);
 
     try {
-      return new DynamicTexture(img);
+      return new DynamicTexture(toNativeImage(img));
     } catch (Exception e) {
       e.printStackTrace();
     }
 
     return null;
+  }
+
+  /** 1.20.1: DynamicTexture takes a NativeImage (ABGR32), not an AWT BufferedImage (ARGB). */
+  private static NativeImage toNativeImage(BufferedImage img) {
+    int width = img.getWidth();
+    int height = img.getHeight();
+    NativeImage image = new NativeImage(NativeImage.Format.RGBA, width, height, false);
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        int argb = img.getRGB(x, y);
+        image.setPixelRGBA(
+            x,
+            y,
+            FastColor.ABGR32.color(
+                FastColor.ARGB32.alpha(argb),
+                FastColor.ARGB32.blue(argb),
+                FastColor.ARGB32.green(argb),
+                FastColor.ARGB32.red(argb)
+            )
+        );
+      }
+    }
+    return image;
   }
 
   protected BufferedImage generateFontImage(
@@ -120,10 +153,13 @@ public class CFont {
     return bufferedImage;
   }
 
-  public void drawChar(CharData[] chars, char c, float x, float y)
+  public void drawChar(
+      PoseStack poseStack, DynamicTexture texture, CharData[] chars, char c, float x, float y, int argb)
       throws ArrayIndexOutOfBoundsException {
     try {
       drawQuad(
+          poseStack,
+          texture,
           x,
           y,
           chars[c].width,
@@ -131,14 +167,22 @@ public class CFont {
           chars[c].storedX,
           chars[c].storedY,
           chars[c].width,
-          chars[c].height
+          chars[c].height,
+          argb
       );
     } catch (Exception e) {
       e.printStackTrace();
     }
   }
 
+  /**
+   * 1.20.1: no more fixed-function immediate mode (glBegin/glTexCoord2f/glVertex2d). Each glyph is
+   * its own draw call through a BufferBuilder + shader, same one-quad-per-call granularity as the
+   * old GL11 code.
+   */
   protected void drawQuad(
+      PoseStack poseStack,
+      DynamicTexture texture,
       float x,
       float y,
       float width,
@@ -146,24 +190,41 @@ public class CFont {
       float srcX,
       float srcY,
       float srcWidth,
-      float srcHeight
+      float srcHeight,
+      int argb
   ) {
     float renderSRCX = srcX / imgSize;
     float renderSRCY = srcY / imgSize;
     float renderSRCWidth = srcWidth / imgSize;
     float renderSRCHeight = srcHeight / imgSize;
-    GL11.glTexCoord2f(renderSRCX + renderSRCWidth, renderSRCY);
-    GL11.glVertex2d(x + width, y);
-    GL11.glTexCoord2f(renderSRCX, renderSRCY);
-    GL11.glVertex2d(x, y);
-    GL11.glTexCoord2f(renderSRCX, renderSRCY + renderSRCHeight);
-    GL11.glVertex2d(x, y + height);
-    GL11.glTexCoord2f(renderSRCX, renderSRCY + renderSRCHeight);
-    GL11.glVertex2d(x, y + height);
-    GL11.glTexCoord2f(renderSRCX + renderSRCWidth, renderSRCY + renderSRCHeight);
-    GL11.glVertex2d(x + width, y + height);
-    GL11.glTexCoord2f(renderSRCX + renderSRCWidth, renderSRCY);
-    GL11.glVertex2d(x + width, y);
+
+    float a = (argb >>> 24) / 255.f;
+    float r = (argb >> 16 & 0xFF) / 255.f;
+    float g = (argb >> 8 & 0xFF) / 255.f;
+    float b = (argb & 0xFF) / 255.f;
+
+    Matrix4f mat = poseStack.last().pose();
+    BufferBuilder builder = Tesselator.getInstance().getBuilder();
+    builder.begin(VertexFormat.Mode.TRIANGLES, DefaultVertexFormat.POSITION_TEX_COLOR);
+    quadVertex(builder, mat, x + width, y, renderSRCX + renderSRCWidth, renderSRCY, r, g, b, a);
+    quadVertex(builder, mat, x, y, renderSRCX, renderSRCY, r, g, b, a);
+    quadVertex(builder, mat, x, y + height, renderSRCX, renderSRCY + renderSRCHeight, r, g, b, a);
+    quadVertex(builder, mat, x, y + height, renderSRCX, renderSRCY + renderSRCHeight, r, g, b, a);
+    quadVertex(builder, mat, x + width, y + height, renderSRCX + renderSRCWidth,
+        renderSRCY + renderSRCHeight, r, g, b, a);
+    quadVertex(builder, mat, x + width, y, renderSRCX + renderSRCWidth, renderSRCY, r, g, b, a);
+
+    RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
+    RenderSystem.setShaderTexture(0, texture.getId());
+    RenderSystem.enableBlend();
+    RenderSystem.defaultBlendFunc();
+    BufferUploader.drawWithShader(builder.end());
+  }
+
+  private static void quadVertex(
+      BufferBuilder builder, Matrix4f mat, float x, float y, float u, float v,
+      float r, float g, float b, float a) {
+    builder.vertex(mat, x, y, 0).uv(u, v).color(r, g, b, a).endVertex();
   }
 
   public int getStringHeight(String text) {

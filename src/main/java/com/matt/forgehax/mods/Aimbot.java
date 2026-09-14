@@ -13,17 +13,17 @@ import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
 import com.matt.forgehax.util.projectile.Projectile;
-import net.minecraft.client.entity.EntityPlayerSP;
-import net.minecraft.entity.Entity;
-import net.minecraft.util.EnumHand;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.World;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 
 import javax.annotation.Nullable;
 import java.util.Comparator;
 import java.util.Objects;
 
-import static com.matt.forgehax.Helper.*;
+import static com.matt.forgehax.Helper.getLocalPlayer;
+import static com.matt.forgehax.Helper.getWorld;
 
 /**
  * Aim assist only. It never attacks on its own, it corrects where the swing or the shot the player
@@ -52,9 +52,6 @@ public class Aimbot extends ToggleMod implements PositionRotationManager.Movemen
   private static final int PREDICTION_FALL_TICKS = 20;
 
   private static Entity target = null;
-
-  private Entity velocityTarget = null;
-  private Vec3d smoothedVelocity = Vec3d.ZERO;
   private final Setting<Boolean> silent =
       getCommandStub()
           .builders()
@@ -147,6 +144,8 @@ public class Aimbot extends ToggleMod implements PositionRotationManager.Movemen
           .description("The method used to select a target from a group")
           .defaultTo(Selector.CROSSHAIR)
           .build();
+  private Entity velocityTarget = null;
+  private Vec3 smoothedVelocity = Vec3.ZERO;
 
   public Aimbot() {
     super(Category.COMBAT, "Aimbot", false, "Aim at what you are attacking or shooting at");
@@ -174,10 +173,10 @@ public class Aimbot extends ToggleMod implements PositionRotationManager.Movemen
 
   @Override
   public void onLocalPlayerMovementUpdate(RotationState.Local state) {
-    final EntityPlayerSP player = getLocalPlayer();
-    final World world = getWorld();
+    final LocalPlayer player = getLocalPlayer();
+    final Level world = getWorld();
 
-    if (player == null || world == null || player.isSpectator() || !player.isEntityAlive()) {
+    if (player == null || world == null || player.isSpectator() || !player.isAlive()) {
       forgetTarget();
       return;
     }
@@ -190,8 +189,8 @@ public class Aimbot extends ToggleMod implements PositionRotationManager.Movemen
       return;
     }
 
-    final Vec3d eyes = EntityUtils.getEyePos(player);
-    final Vec3d look = player.getLookVec().normalize();
+    final Vec3 eyes = EntityUtils.getEyePos(player);
+    final Vec3 look = player.getLookAngle().normalize();
     final Angle angles = AngleHelper.getAngleFacingInDegrees(look);
 
     Entity found = target;
@@ -215,47 +214,49 @@ public class Aimbot extends ToggleMod implements PositionRotationManager.Movemen
    * The whole point of the mod: it aims, it never swings. Melee follows the attack key, projectiles
    * follow the item actually being drawn or thrown.
    */
-  private boolean isAttacking(EntityPlayerSP player, boolean useProjectile) {
+  private boolean isAttacking(LocalPlayer player, boolean useProjectile) {
     return useProjectile
-        ? player.isHandActive() || Bindings.use.getBinding().isKeyDown()
-        : Bindings.attack.getBinding().isKeyDown();
+        ? player.isUsingItem() || Bindings.use.isPressed()
+        : Bindings.attack.isPressed();
   }
 
   private void forgetTarget() {
     target = null;
     velocityTarget = null;
-    smoothedVelocity = Vec3d.ZERO;
+    smoothedVelocity = Vec3.ZERO;
   }
 
   private Projectile getHeldProjectile() {
-    return Projectile.getProjectileByItemStack(getLocalPlayer().getHeldItem(EnumHand.MAIN_HAND));
+    return Projectile.getProjectileByItemStack(getLocalPlayer().getMainHandItem());
   }
 
   /**
-   * How far the item has been drawn right now. A bow's arc depends on it, so it has to come from the
-   * player rather than a setting now that the player is the one releasing the shot. Throwables
-   * ignore the charge entirely.
+   * The force the shot leaves with, which is the full draw and not the draw so far. A bow reaches
+   * six blocks five ticks into its draw, so solving against the instantaneous charge left every
+   * target unreachable - and therefore unacquirable, since acquisition needs a launch solution -
+   * for the first half of every draw. Throwables ignore the charge entirely and their max is their
+   * only force.
    */
-  private int getCharge(EntityPlayerSP player) {
-    return player.isHandActive() ? Math.max(1, player.getItemInUseMaxCount()) : 1;
+  private double getForce(Projectile projectile) {
+    return projectile.getMaxForce();
   }
 
   private boolean isVisible(Entity entity, boolean useProjectile) {
-    if (useProjectile && projectileTraceCheck.get()) {
+    if (useProjectile && Boolean.TRUE.equals(projectileTraceCheck.get())) {
       // no lead here, this runs over every candidate entity and only decides whether the target is
       // worth acquiring at all
-      final EntityPlayerSP player = getLocalPlayer();
+      final LocalPlayer player = getLocalPlayer();
       Projectile projectile = getHeldProjectile();
-      Vec3d shootPos = Projectile.getEntityShootPos(player);
-      Vec3d inherited = getInheritedMotion();
-      double force = projectile.getForce(getCharge(player));
+      Vec3 shootPos = Projectile.getEntityShootPos(player);
+      Vec3 inherited = getInheritedMotion();
+      double force = getForce(projectile);
 
       Projectile.LaunchSolution solution =
           projectile.solveLaunch(shootPos, getAttackPosition(entity), force, inherited);
       return solution != null
           && projectile.isPathClear(shootPos, solution, force, inherited, entity);
     } else {
-      return !visCheck.get() || getLocalPlayer().canEntityBeSeen(entity);
+      return !visCheck.get() || getLocalPlayer().hasLineOfSight(entity);
     }
   }
 
@@ -263,20 +264,21 @@ public class Aimbot extends ToggleMod implements PositionRotationManager.Movemen
    * Velocity the projectile picks up from the player, see EntityArrow#shoot(Entity, ...). It is
    * added on top of the aimed velocity, so the aim has to be bent to cancel it out.
    */
-  private Vec3d getInheritedMotion() {
-    EntityPlayerSP player = getLocalPlayer();
-    return new Vec3d(player.motionX, player.onGround ? 0.D : player.motionY, player.motionZ);
+  private Vec3 getInheritedMotion() {
+    LocalPlayer player = getLocalPlayer();
+    Vec3 motion = player.getDeltaMovement();
+    return new Vec3(motion.x, player.onGround() ? 0.D : motion.y, motion.z);
   }
 
-  private Vec3d getAttackPosition(Entity entity) {
-    return EntityUtils.getInterpolatedPos(entity, 1).addVector(0, entity.getEyeHeight() / 2, 0);
+  private Vec3 getAttackPosition(Entity entity) {
+    return EntityUtils.getInterpolatedPos(entity, 1).add(0, entity.getEyeHeight() / 2, 0);
   }
 
   /**
    * Which entities may be targeted is shared with KillAura through the Targets module, only the
    * geometry is the aimbot's own.
    */
-  private boolean filterTarget(Vec3d eyes, Vec3d viewNormal, Angle angles, Entity entity) {
+  private boolean filterTarget(Vec3 eyes, Vec3 viewNormal, Angle angles, Entity entity) {
     final boolean useProjectile = projectileAimbot.get() && !getHeldProjectile().isNull();
     return Targets.isValidTarget(entity)
         && isInRange(eyes, entity, useProjectile)
@@ -284,15 +286,15 @@ public class Aimbot extends ToggleMod implements PositionRotationManager.Movemen
         && isVisible(entity, useProjectile);
   }
 
-  private boolean isInRange(Vec3d eyes, Entity entity, boolean useProjectile) {
+  private boolean isInRange(Vec3 eyes, Entity entity, boolean useProjectile) {
     double dist = useProjectile ? projectileRange.get() : range.get();
     if (dist <= 0.D) {
       return true;
     }
-    return EntityUtils.getDistanceSq(eyes, entity.getEntityBoundingBox()) <= dist * dist;
+    return EntityUtils.getDistanceSq(eyes, entity.getBoundingBox()) <= dist * dist;
   }
 
-  private boolean isInFov(Angle angle, Vec3d pos) {
+  private boolean isInFov(Angle angle, Vec3 pos) {
     double max = this.fov.get();
     if (max >= 180) {
       return true;
@@ -302,25 +304,30 @@ public class Aimbot extends ToggleMod implements PositionRotationManager.Movemen
     return Math.abs(diff.getPitch()) <= max && Math.abs(diff.getYaw()) <= max;
   }
 
-  private double selecting(final Vec3d eyes, final Vec3d viewNormal, final Entity entity) {
-    switch (selector.get()) {
-      case DISTANCE:
-        return getAttackPosition(entity).subtract(eyes).lengthSquared();
-      case CROSSHAIR:
-      default:
-        return getAttackPosition(entity)
-            .subtract(eyes)
-            .normalize()
-            .subtract(viewNormal)
-            .lengthSquared();
+  private double selecting(final Vec3 eyes, final Vec3 viewNormal, final Entity entity) {
+    Aimbot.Selector aimSelector = selector.get();
+
+    if (aimSelector == Selector.DISTANCE) {
+      return getAttackPosition(entity).subtract(eyes).lengthSqr();
     }
+
+    return getAttackPosition(entity)
+        .subtract(eyes)
+        .normalize()
+        .subtract(viewNormal)
+        .lengthSqr();
   }
 
   @Nullable
-  private Entity findTarget(
-      final World world, final Vec3d eyes, final Vec3d viewNormal, final Angle angles) {
+  private Entity findTarget(final Level world, final Vec3 eyes, final Vec3 viewNormal, final Angle angles) {
+    double rangeMax = Math.max(this.range.get(), this.projectileRange.get());
+    final net.minecraft.world.phys.AABB search;
+    if (rangeMax > 0.D) {
+      assert getLocalPlayer() != null;
+      search = getLocalPlayer().getBoundingBox().inflate(rangeMax + 2.D);
+    } else {search = new net.minecraft.world.phys.AABB(-3.0E7D, -3.0E7D, -3.0E7D, 3.0E7D, 3.0E7D, 3.0E7D);}
     return world
-        .loadedEntityList
+        .getEntities((Entity) null, search, entity -> true)
         .stream()
         .filter(entity -> filterTarget(eyes, viewNormal, angles, entity))
         .min(Comparator.comparingDouble(entity -> selecting(eyes, viewNormal, entity)))
@@ -328,10 +335,10 @@ public class Aimbot extends ToggleMod implements PositionRotationManager.Movemen
   }
 
   private void aimProjectile(
-      RotationState.Local state, EntityPlayerSP player, Projectile projectile, Entity tar) {
-    final Vec3d shootPos = Projectile.getEntityShootPos(player);
-    final Vec3d inherited = getInheritedMotion();
-    final double force = projectile.getForce(getCharge(player));
+      RotationState.Local state, LocalPlayer player, Projectile projectile, Entity tar) {
+    final Vec3 shootPos = Projectile.getEntityShootPos(player);
+    final Vec3 inherited = getInheritedMotion();
+    final double force = getForce(projectile);
 
     Projectile.LaunchSolution solution = solveWithLead(projectile, shootPos, inherited, force, tar);
 
@@ -346,13 +353,13 @@ public class Aimbot extends ToggleMod implements PositionRotationManager.Movemen
    */
   @Nullable
   private Projectile.LaunchSolution solveWithLead(
-      Projectile projectile, Vec3d shootPos, Vec3d inherited, double force, Entity tar) {
-    final Vec3d instant = EntityUtils.getInterpolatedAmount(tar, 1.D);
-    final Vec3d velocity = updateTargetVelocity(tar, instant);
-    final Vec3d lead =
-        projectilePredict.get()
+      Projectile projectile, Vec3 shootPos, Vec3 inherited, double force, Entity tar) {
+    final Vec3 instant = EntityUtils.getInterpolatedAmount(tar, 1.D);
+    final Vec3 velocity = updateTargetVelocity(tar, instant);
+    final Vec3 lead =
+        Boolean.TRUE.equals(projectilePredict.get())
             ? velocity.scale(projectileLead.get() * getLeadConfidence(instant, velocity))
-            : Vec3d.ZERO;
+            : Vec3.ZERO;
 
     double flightTicks = 0.D;
     Projectile.LaunchSolution solution = null;
@@ -376,7 +383,7 @@ public class Aimbot extends ToggleMod implements PositionRotationManager.Movemen
    * Velocity taken from the position delta rather than motionX/Y/Z, which the client only
    * interpolates for other players and is routinely stale or flat zero.
    */
-  private Vec3d updateTargetVelocity(Entity tar, Vec3d instant) {
+  private Vec3 updateTargetVelocity(Entity tar, Vec3 instant) {
     if (!Objects.equals(tar, velocityTarget)) {
       velocityTarget = tar;
       smoothedVelocity = instant;
@@ -396,12 +403,12 @@ public class Aimbot extends ToggleMod implements PositionRotationManager.Movemen
    * (IMM over constant velocity/constant turn models). Swap it out if leading strafing players is
    * still not good enough.
    */
-  private double getLeadConfidence(Vec3d instant, Vec3d smoothed) {
-    double speed = smoothed.lengthVector();
+  private double getLeadConfidence(Vec3 instant, Vec3 smoothed) {
+    double speed = smoothed.length();
     if (speed < 1.0E-4D) {
       return 0.D;
     }
-    return Utils.clamp(1.D - instant.subtract(smoothed).lengthVector() / speed, 0.D, 1.D);
+    return Utils.clamp(1.D - instant.subtract(smoothed).length() / speed, 0.D, 1.D);
   }
 
   /**
@@ -409,22 +416,22 @@ public class Aimbot extends ToggleMod implements PositionRotationManager.Movemen
    * which is what a player holding a movement key actually does, while an airborne target follows
    * the minecraft fall curve.
    */
-  private Vec3d predictPosition(Entity tar, Vec3d lead, double ticks) {
-    Vec3d base = getAttackPosition(tar);
+  private Vec3 predictPosition(Entity tar, Vec3 lead, double ticks) {
+    Vec3 base = getAttackPosition(tar);
 
-    if (ticks <= 0.D || lead.lengthSquared() <= 0.D) {
+    if (ticks <= 0.D || lead.lengthSqr() <= 0.D) {
       return base;
     }
 
     double y = base.y;
-    if (!tar.onGround) {
+    if (!tar.onGround()) {
       double motionY = lead.y;
       for (int i = 0; i < Math.min(ticks, PREDICTION_FALL_TICKS); i++) {
         y += motionY;
         motionY = (motionY - 0.08D) * 0.98D;
       }
     }
-    return new Vec3d(base.x + lead.x * ticks, y, base.z + lead.z * ticks);
+    return new Vec3(base.x + lead.x * ticks, y, base.z + lead.z * ticks);
   }
 
   enum Selector {

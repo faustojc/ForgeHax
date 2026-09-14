@@ -2,15 +2,16 @@ package com.matt.forgehax.util.classloader;
 
 import com.google.common.collect.Lists;
 import com.matt.forgehax.util.Streamables;
-import sun.net.www.protocol.file.FileURLConnection;
-
 import java.io.File;
 import java.io.IOException;
 import java.net.JarURLConnection;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLConnection;
-import java.net.URLDecoder;
 import java.nio.file.FileSystem;
+import java.nio.file.FileSystemNotFoundException;
+import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -18,6 +19,7 @@ import java.util.*;
 import java.util.function.Function;
 import java.util.jar.JarFile;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.matt.forgehax.util.FileHelper.*;
 
@@ -206,54 +208,48 @@ public class ClassLoaderHelper {
     Objects.requireNonNull(packageDir);
     Objects.requireNonNull(classLoader);
 
-    List<Path> results = Lists.newArrayList();
-
+    final List<Path> results = Lists.newArrayList();
     final String pkgdir = asFilePath(packageDir);
-    Enumeration<URL> inside = classLoader.getResources(pkgdir);
-    Streamables.enumerationStream(inside)
-               .forEach(
-                   url -> {
-                     URLConnection connection;
-                     try {
-                       connection = url.openConnection();
 
-                       // get the path to the jar/folder containing the classes
-                       String path =
-                           URLDecoder.decode(url.getPath(), "UTF-8")
-                                     .replace('\\', '/'); // get path and covert backslashes to forward slashes
-                       path =
-                           path.substring(
-                               path.indexOf('/') + 1
-                           ); // remove the initial '/' or 'file:/' appended to the path
-
-                       if (!System.getProperty("os.name").startsWith("Windows")) {
-                         path = "/" + path;
-                       }
-
-                       // the root directory to the jar/folder containing the classes
-                       String rootDir = path.substring(0, path.indexOf(pkgdir));
-                       // package directory
-                       String packDir = path.substring(path.lastIndexOf(pkgdir));
-
-                       if (connection instanceof FileURLConnection) {
-                         final Path root = Paths.get(rootDir).normalize();
-                         getClassPathsInDirectory(path, recursive)
-                             .stream()
-                             .map(root::relativize)
-                             .forEach(results::add);
-                       } else if (connection instanceof JarURLConnection) {
-                         results.addAll(
-                             getClassPathsInJar(
-                                 ((JarURLConnection) connection).getJarFile(), packDir, recursive));
-                       } else {
-                         throw new UnknownConnectionType();
-                       }
-                     } catch (Exception e) {
-                       throw new RuntimeException(e);
-                     }
-                   });
+    // ModLauncher serves mod resources from its own "union" filesystem, so neither a file: URL
+    // nor a JarURLConnection is guaranteed here. Every scheme with a registered NIO provider
+    // resolves through Paths.get(URI), jar: included once its filesystem is open.
+    for (URL url : Collections.list(classLoader.getResources(pkgdir))) {
+      Path root = toPath(url);
+      try (Stream<Path> found = Files.walk(root, recursive ? Integer.MAX_VALUE : 1)) {
+        found.filter(Files::isRegularFile)
+             .filter(path -> path.getFileName().toString().endsWith(".class"))
+             .map(path -> Paths.get(pkgdir, root.relativize(path).toString()))
+             .forEach(results::add);
+      }
+    }
 
     return results;
+  }
+
+  private static Path toPath(URL url) throws IOException {
+    URI uri;
+    try {
+      uri = url.toURI();
+    } catch (URISyntaxException e) {
+      throw new IOException("malformed resource url " + url, e);
+    }
+    try {
+      return Paths.get(uri);
+    } catch (FileSystemNotFoundException e) {
+      // a jar: url whose filesystem nobody opened yet
+      if (!"jar".equalsIgnoreCase(url.getProtocol())) {
+        throw new IOException("no filesystem provider for " + url, e);
+      }
+      URLConnection connection = url.openConnection();
+      if (!(connection instanceof JarURLConnection)) {
+        throw new IOException("no filesystem provider for " + url, e);
+      }
+      JarURLConnection jar = (JarURLConnection) connection;
+      FileSystem fs =
+          FileSystems.newFileSystem(Paths.get(jar.getJarFileURL().getPath()), (ClassLoader) null);
+      return fs.getPath(jar.getEntryName());
+    }
   }
 
   public static List<Path> getClassPathsInPackage(final ClassLoader classLoader, String packageDir)
@@ -282,9 +278,5 @@ public class ClassLoaderHelper {
             })
         .filter(Objects::nonNull)
         .collect(Collectors.toList());
-  }
-
-  public static class UnknownConnectionType extends Exception {
-
   }
 }

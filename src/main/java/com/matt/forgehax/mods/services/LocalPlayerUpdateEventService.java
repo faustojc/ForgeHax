@@ -3,10 +3,11 @@ package com.matt.forgehax.mods.services;
 import com.matt.forgehax.events.LocalPlayerUpdateEvent;
 import com.matt.forgehax.util.mod.ServiceMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.entity.living.LivingEvent;
-import net.minecraftforge.fml.common.eventhandler.Event;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.eventbus.api.Event;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import static com.matt.forgehax.Helper.getLocalPlayer;
 import static com.matt.forgehax.Helper.getWorld;
@@ -22,11 +23,12 @@ public class LocalPlayerUpdateEventService extends ServiceMod {
   }
 
   @SubscribeEvent
-  public void onUpdate(LivingEvent.LivingUpdateEvent event) {
+  public void onUpdate(LivingEvent.LivingTickEvent event) {
+    LivingEntity entity = event.getEntity();
     if (getWorld() != null
-        && event.getEntity().getEntityWorld().isRemote
-        && event.getEntityLiving().equals(getLocalPlayer())) {
-      Event ev = new LocalPlayerUpdateEvent(event.getEntityLiving());
+        && entity.level().isClientSide()
+        && entity.equals(getLocalPlayer())) {
+      Event ev = new LocalPlayerUpdateEvent(entity);
       MinecraftForge.EVENT_BUS.post(ev);
       event.setCanceled(ev.isCanceled());
     }

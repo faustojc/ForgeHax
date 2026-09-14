@@ -1,56 +1,41 @@
 package com.matt.forgehax.util.math;
 
 import com.matt.forgehax.Globals;
-import com.matt.forgehax.asm.reflection.FastReflection;
-import net.minecraft.client.gui.ScaledResolution;
-import net.minecraft.client.renderer.ActiveRenderInfo;
-import net.minecraft.entity.Entity;
-import net.minecraft.util.math.Vec3d;
-import org.lwjgl.util.vector.Matrix4f;
-import org.lwjgl.util.vector.Vector4f;
+import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Camera;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
+import org.joml.Vector4f;
 
 public class VectorUtils implements Globals {
   // Credits to Gregor and P47R1CK for the 3D vector transformation code
 
-  static Matrix4f modelMatrix = new Matrix4f();
-  static Matrix4f projectionMatrix = new Matrix4f();
-
-  private static void VecTransformCoordinate(Vector4f vec, Matrix4f matrix) {
-    float x = vec.x;
-    float y = vec.y;
-    float z = vec.z;
-    vec.x = (x * matrix.m00) + (y * matrix.m10) + (z * matrix.m20) + matrix.m30;
-    vec.y = (x * matrix.m01) + (y * matrix.m11) + (z * matrix.m21) + matrix.m31;
-    vec.z = (x * matrix.m02) + (y * matrix.m12) + (z * matrix.m22) + matrix.m32;
-    vec.w = (x * matrix.m03) + (y * matrix.m13) + (z * matrix.m23) + matrix.m33;
-  }
-
   /**
-   * Convert 3D coord into 2D coordinate projected onto the screen
+   * Convert 3D coordinates into a 2D coordinate projected onto the screen.
+   *
+   * <p>The model-view and projection matrices are read from the active render
+   * state, which is the supported replacement for the old ActiveRenderInfo
+   * reflection fields.
    */
   public static Plane toScreen(double x, double y, double z) {
-    Entity view = MC.getRenderViewEntity();
+    Entity view = MC.getCameraEntity();
+    Camera camera = MC.gameRenderer.getMainCamera();
 
-    if (view == null) {
+    if (view == null || camera == null) {
       return new Plane(0.D, 0.D, false);
     }
 
-    Vec3d camPos = FastReflection.Fields.ActiveRenderInfo_position.getStatic();
-    Vec3d eyePos = ActiveRenderInfo.projectViewFromEntity(view, MC.getRenderPartialTicks());
+    Vec3 cameraPos = camera.getPosition();
+    Vector4f pos = new Vector4f(
+        (float) (x - cameraPos.x),
+        (float) (y - cameraPos.y),
+        (float) (z - cameraPos.z),
+        1.f
+    );
 
-    float vecX = (float) ((camPos.x + eyePos.x) - (float) x);
-    float vecY = (float) ((camPos.y + eyePos.y) - (float) y);
-    float vecZ = (float) ((camPos.z + eyePos.z) - (float) z);
-
-    Vector4f pos = new Vector4f(vecX, vecY, vecZ, 1.f);
-
-    modelMatrix.load(
-        FastReflection.Fields.ActiveRenderInfo_MODELVIEW.getStatic().asReadOnlyBuffer());
-    projectionMatrix.load(
-        FastReflection.Fields.ActiveRenderInfo_PROJECTION.getStatic().asReadOnlyBuffer());
-
-    VecTransformCoordinate(pos, modelMatrix);
-    VecTransformCoordinate(pos, projectionMatrix);
+    pos.mul(new Matrix4f(RenderSystem.getModelViewMatrix()));
+    pos.mul(new Matrix4f(RenderSystem.getProjectionMatrix()));
 
     if (pos.w > 0.f) {
       pos.x *= -100000;
@@ -61,19 +46,20 @@ public class VectorUtils implements Globals {
       pos.y *= invert;
     }
 
-    ScaledResolution res = new ScaledResolution(MC);
-    float halfWidth = (float) res.getScaledWidth() / 2.f;
-    float halfHeight = (float) res.getScaledHeight() / 2.f;
+    float screenWidth = MC.getWindow().getGuiScaledWidth();
+    float screenHeight = MC.getWindow().getGuiScaledHeight();
+    float halfWidth = screenWidth / 2.f;
+    float halfHeight = screenHeight / 2.f;
 
-    pos.x = halfWidth + (0.5f * pos.x * res.getScaledWidth() + 0.5f);
-    pos.y = halfHeight - (0.5f * pos.y * res.getScaledHeight() + 0.5f);
+    pos.x = halfWidth + (0.5f * pos.x * screenWidth + 0.5f);
+    pos.y = halfHeight - (0.5f * pos.y * screenHeight + 0.5f);
 
-    boolean bVisible = !(pos.x < 0) && !(pos.y < 0) && !(pos.x > res.getScaledWidth()) && !(pos.y > res.getScaledHeight());
-
-    return new Plane(pos.x, pos.y, bVisible);
+    boolean visible = pos.x >= 0 && pos.y >= 0
+        && pos.x <= screenWidth && pos.y <= screenHeight;
+    return new Plane(pos.x, pos.y, visible);
   }
 
-  public static Plane toScreen(Vec3d vec) {
+  public static Plane toScreen(Vec3 vec) {
     return toScreen(vec.x, vec.y, vec.z);
   }
 
@@ -84,28 +70,29 @@ public class VectorUtils implements Globals {
   }
 
   @Deprecated
-  public static ScreenPos _toScreen(Vec3d vec3d) {
-    return _toScreen(vec3d.x, vec3d.y, vec3d.z);
+  public static ScreenPos _toScreen(Vec3 vec) {
+    return _toScreen(vec.x, vec.y, vec.z);
   }
 
   /**
-   * Convert a vector to a angle
+   * Convert a vector to an angle. Kept for source compatibility with the old
+   * API; callers should use AngleHelper directly.
    */
   @Deprecated
-  public static Object vectorAngle(Vec3d vec3d) {
+  public static Object vectorAngle(Vec3 vec) {
     return null;
   }
 
-  public static Vec3d multiplyBy(Vec3d vec1, Vec3d vec2) {
-    return new Vec3d(vec1.x * vec2.x, vec1.y * vec2.y, vec1.z * vec2.z);
+  public static Vec3 multiplyBy(Vec3 vec1, Vec3 vec2) {
+    return new Vec3(vec1.x * vec2.x, vec1.y * vec2.y, vec1.z * vec2.z);
   }
 
-  public static Vec3d copy(Vec3d toCopy) {
-    return new Vec3d(toCopy.x, toCopy.y, toCopy.z);
+  public static Vec3 copy(Vec3 toCopy) {
+    return new Vec3(toCopy.x, toCopy.y, toCopy.z);
   }
 
-  public static double getCrosshairDistance(Vec3d eyes, Vec3d directionVec, Vec3d pos) {
-    return pos.subtract(eyes).normalize().subtract(directionVec).lengthSquared();
+  public static double getCrosshairDistance(Vec3 eyes, Vec3 directionVec, Vec3 pos) {
+    return pos.subtract(eyes).normalize().subtract(directionVec).lengthSqr();
   }
 
   @Deprecated

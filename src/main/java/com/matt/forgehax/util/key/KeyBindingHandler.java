@@ -1,8 +1,7 @@
 package com.matt.forgehax.util.key;
 
 import com.matt.forgehax.Globals;
-import com.matt.forgehax.asm.reflection.FastReflection;
-import net.minecraft.client.settings.KeyBinding;
+import net.minecraft.client.KeyMapping;
 import net.minecraftforge.client.settings.IKeyConflictContext;
 
 public class KeyBindingHandler implements Globals {
@@ -20,34 +19,38 @@ public class KeyBindingHandler implements Globals {
         }
       };
 
-  private final KeyBinding binding;
+  private final KeyMapping binding;
 
   private IKeyConflictContext oldConflictContext = null;
 
   private int bindingCount = 0;
 
-  public KeyBindingHandler(KeyBinding bind) {
+  // TODO(1.20.1): KeyMapping no longer tracks a held-duration counter (only a click
+  // count via consumeClick()); this is our own local stand-in and nothing increments it.
+  private int pressTime = 0;
+
+  public KeyBindingHandler(KeyMapping bind) {
     binding = bind;
   }
 
-  public KeyBinding getBinding() {
+  public KeyMapping getBinding() {
     return binding;
   }
 
   public boolean isPressed() {
-    return FastReflection.Fields.Binding_pressed.get(binding);
+    return binding.isDown();
   }
 
   public void setPressed(boolean pressed) {
-    FastReflection.Fields.Binding_pressed.set(binding, pressed);
+    binding.setDown(pressed);
   }
 
   public int getPressTime() {
-    return FastReflection.Fields.Binding_pressTime.get(binding);
+    return pressTime;
   }
 
   public void setPressTime(int time) {
-    FastReflection.Fields.Binding_pressTime.set(binding, time);
+    pressTime = time;
   }
 
   public boolean isBound() {

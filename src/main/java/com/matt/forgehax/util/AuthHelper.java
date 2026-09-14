@@ -2,14 +2,14 @@ package com.matt.forgehax.util;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.matt.forgehax.asm.reflection.FastReflection;
+import com.matt.forgehax.mixin.accessor.MinecraftAccessor;
 import com.matt.forgehax.mods.managers.AccountManager;
 import com.mojang.authlib.Agent;
 import com.mojang.authlib.exceptions.AuthenticationException;
 import com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService;
 import com.mojang.authlib.yggdrasil.YggdrasilUserAuthentication;
 import com.mojang.util.UUIDTypeAdapter;
-import net.minecraft.util.Session;
+import net.minecraft.client.User;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.spec.KeySpec;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Optional;
 import java.util.UUID;
 
 import static com.matt.forgehax.Globals.MC;
@@ -39,7 +40,7 @@ public final class AuthHelper extends YggdrasilUserAuthentication {
   private final YggdrasilAuthenticationService authService;
 
   public AuthHelper() {
-    super(new YggdrasilAuthenticationService(MC.getProxy(), null), Agent.MINECRAFT);
+    super(new YggdrasilAuthenticationService(MC.getProxy(), (String) null), UUID.randomUUID().toString(), Agent.MINECRAFT);
     authService = new YggdrasilAuthenticationService(MC.getProxy(), UUID.randomUUID().toString());
   }
 
@@ -125,8 +126,8 @@ public final class AuthHelper extends YggdrasilUserAuthentication {
     return authService;
   }
 
-  public void setSession(Session s) {
-    FastReflection.Fields.Minecraft_session.set(MC, s);
+  public void setSession(User s) {
+    ((MinecraftAccessor) MC).setUser(s);
   }
 
   public void newLogin(String login, String password) throws AuthenticationException {
@@ -135,13 +136,17 @@ public final class AuthHelper extends YggdrasilUserAuthentication {
 
     // For new client token.
     logInWithPassword();
-    Session newSession = new Session(
+    User newUser = new User(
         getSelectedProfile().getName(),
-        UUIDTypeAdapter.fromUUID(getSelectedProfile().getId()), getAuthenticatedToken(), getUserType().getName()
+        UUIDTypeAdapter.fromUUID(getSelectedProfile().getId()),
+        getAuthenticatedToken(),
+        Optional.empty(),
+        Optional.empty(),
+        User.Type.byName(getUserType().getName())
     );
 
-    newSession.setProperties(getUserProperties());
+    newUser.setProperties(getUserProperties());
     logOut();
-    setSession(newSession);
+    setSession(newUser);
   }
 }

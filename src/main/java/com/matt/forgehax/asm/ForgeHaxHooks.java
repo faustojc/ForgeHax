@@ -9,30 +9,33 @@ import com.matt.forgehax.asm.events.listeners.BlockModelRenderListener;
 import com.matt.forgehax.asm.events.listeners.Listeners;
 import com.matt.forgehax.asm.utils.MultiBoolean;
 import com.matt.forgehax.asm.utils.debug.HookReporter;
-import net.minecraft.block.Block;
-import net.minecraft.block.state.IBlockState;
+import com.mojang.blaze3d.vertex.BufferBuilder;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.entity.EntityPlayerSP;
-import net.minecraft.client.multiplayer.PlayerControllerMP;
-import net.minecraft.client.renderer.BufferBuilder;
-import net.minecraft.client.renderer.ViewFrustum;
-import net.minecraft.client.renderer.chunk.*;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityLivingBase;
-import net.minecraft.entity.item.EntityBoat;
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.item.ItemStack;
-import net.minecraft.network.Packet;
-import net.minecraft.util.BlockRenderLayer;
-import net.minecraft.util.EnumFacing;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.EnumSkyBlock;
-import net.minecraft.world.IBlockAccess;
-import net.minecraft.world.World;
+import net.minecraft.client.multiplayer.MultiPlayerGameMode;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.ViewArea;
+import net.minecraft.client.renderer.chunk.ChunkRenderDispatcher;
+import net.minecraft.client.renderer.chunk.ChunkRenderDispatcher.RenderChunk;
+import net.minecraft.client.renderer.chunk.VisibilitySet;
+import net.minecraft.client.renderer.chunk.VisGraph;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.vehicle.Boat;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.BlockAndTintGetter;
+import net.minecraft.world.level.LightLayer;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.fml.common.eventhandler.Event;
+import net.minecraftforge.eventbus.api.Event;
 
 import java.nio.ByteOrder;
 import java.util.Collections;
@@ -454,7 +457,7 @@ public class ForgeHaxHooks implements ASMCommon {
         && MinecraftForge.EVENT_BUS.post(new PushOutOfBlocksEvent());
   }
 
-  public static float onRenderBoat(EntityBoat boat, float entityYaw) {
+  public static float onRenderBoat(Boat boat, float entityYaw) {
     if (HOOK_onRenderBoat.reportHook()) {
       RenderBoatEvent event = new RenderBoatEvent(boat, entityYaw);
       MinecraftForge.EVENT_BUS.post(event);
@@ -464,7 +467,7 @@ public class ForgeHaxHooks implements ASMCommon {
     }
   }
 
-  public static void onSchematicaPlaceBlock(ItemStack itemIn, BlockPos posIn, Vec3d vecIn, EnumFacing sideIn) {
+  public static void onSchematicaPlaceBlock(ItemStack itemIn, BlockPos posIn, Vec3 vecIn, Direction sideIn) {
     if (HOOK_onSchematicaPlaceBlock.reportHook()) {
       MinecraftForge.EVENT_BUS.post(new SchematicaPlaceBlockEvent(itemIn, posIn, vecIn, sideIn));
     }
@@ -497,7 +500,7 @@ public class ForgeHaxHooks implements ASMCommon {
     }
   }
 
-  public static boolean onWaterMovement(Entity entity, Vec3d moveDir) {
+  public static boolean onWaterMovement(Entity entity, Vec3 moveDir) {
     return HOOK_onWaterMovement.reportHook()
         && MinecraftForge.EVENT_BUS.post(new WaterMovementEvent(entity, moveDir));
   }
@@ -529,12 +532,12 @@ public class ForgeHaxHooks implements ASMCommon {
     return buffer;
   }
 
-  public static boolean onPreRenderBlockLayer(BlockRenderLayer layer, double partialTicks) {
+  public static boolean onPreRenderBlockLayer(RenderType layer, double partialTicks) {
     return HOOK_onPreRenderBlockLayer.reportHook()
         && MinecraftForge.EVENT_BUS.post(new RenderBlockLayerEvent.Pre(layer, partialTicks));
   }
 
-  public static void onPostRenderBlockLayer(BlockRenderLayer layer, double partialTicks) {
+  public static void onPostRenderBlockLayer(RenderType layer, double partialTicks) {
     if (HOOK_onPostRenderBlockLayer.reportHook()) {
       MinecraftForge.EVENT_BUS.post(new RenderBlockLayerEvent.Post(layer, partialTicks));
     }
@@ -551,32 +554,32 @@ public class ForgeHaxHooks implements ASMCommon {
   }
 
   @Deprecated
-  public static void onComputeVisibility(VisGraph visGraph, SetVisibility setVisibility) {
+  public static void onComputeVisibility(VisGraph visGraph, VisibilitySet setVisibility) {
     if (HOOK_onComputeVisibility.reportHook()) {
       MinecraftForge.EVENT_BUS.post(new ComputeVisibilityEvent(visGraph, setVisibility));
     }
   }
 
   @Deprecated
-  public static boolean onDoBlockCollisions(Entity entity, BlockPos pos, IBlockState state) {
+  public static boolean onDoBlockCollisions(Entity entity, BlockPos pos, BlockState state) {
     return HOOK_onDoBlockCollisions.reportHook()
         && MinecraftForge.EVENT_BUS.post(new DoBlockCollisionsEvent(entity, pos, state));
   }
 
-  public static boolean isBlockFiltered(Entity entity, IBlockState state) {
+  public static boolean isBlockFiltered(Entity entity, BlockState state) {
     return HOOK_isBlockFiltered.reportHook()
-        && entity instanceof EntityPlayer
+        && entity instanceof Player
         && LIST_BLOCK_FILTER.contains(state.getBlock().getClass());
   }
 
   @Deprecated
-  public static boolean onApplyClimbableBlockMovement(EntityLivingBase livingBase) {
+  public static boolean onApplyClimbableBlockMovement(LivingEntity livingBase) {
     return HOOK_onApplyClimbableBlockMovement.reportHook()
         && MinecraftForge.EVENT_BUS.post(new ApplyClimbableBlockMovement(livingBase));
   }
 
-  public static BlockRenderLayer onRenderBlockInLayer(
-      Block block, IBlockState state, BlockRenderLayer layer, BlockRenderLayer compareToLayer) {
+  public static RenderType onRenderBlockInLayer(
+      Block block, BlockState state, RenderType layer, RenderType compareToLayer) {
     if (HOOK_onRenderBlockInLayer.reportHook()) {
       RenderBlockInLayerEvent event =
           new RenderBlockInLayerEvent(block, state, layer, compareToLayer);
@@ -589,19 +592,32 @@ public class ForgeHaxHooks implements ASMCommon {
 
   @Deprecated
   public static void onBlockRender(
-      BlockPos pos, IBlockState state, IBlockAccess access, BufferBuilder buffer) {
+      BlockPos pos, BlockState state, BlockAndTintGetter access, BufferBuilder buffer) {
     if (HOOK_onBlockRender.reportHook()) {
       MinecraftForge.EVENT_BUS.post(new BlockRenderEvent(pos, state, access, buffer));
     }
   }
 
+  /**
+   * Collision shapes are resolved for every entity's every move, on the client and the integrated
+   * server both. Only the local player and whatever it is riding can matter to a client mod, so
+   * everything else is rejected before the event is built.
+   */
+  public static boolean shouldFireCollisionBoxes(Entity entity) {
+    if (entity == null || !HOOK_onAddCollisionBoxToList.reportHook()) {
+      return false;
+    }
+    LocalPlayer player = Minecraft.getInstance().player;
+    return player != null && (entity == player || entity == player.getVehicle());
+  }
+
   public static boolean onAddCollisionBoxToList(
       Block block,
-      IBlockState state,
-      World worldIn,
+      BlockState state,
+      Level worldIn,
       BlockPos pos,
-      AxisAlignedBB entityBox,
-      List<AxisAlignedBB> collidingBoxes,
+      AABB entityBox,
+      List<AABB> collidingBoxes,
       Entity entityIn,
       boolean bool
   ) {
@@ -612,7 +628,7 @@ public class ForgeHaxHooks implements ASMCommon {
   }
 
   public static void onBlockRenderInLoop(
-      RenderChunk renderChunk, Block block, IBlockState state, BlockPos pos) {
+      RenderChunk renderChunk, Block block, BlockState state, BlockPos pos) {
     // faster hook
     if (HOOK_onBlockRenderInLoop.reportHook()) {
       for (BlockModelRenderListener listener : Listeners.BLOCK_MODEL_RENDER_LISTENER.getAll()) {
@@ -640,29 +656,28 @@ public class ForgeHaxHooks implements ASMCommon {
     }
   }
 
-  public static void onAddRenderChunk(RenderChunk renderChunk, BlockRenderLayer layer) {
+  public static void onAddRenderChunk(RenderChunk renderChunk, RenderType layer) {
     if (HOOK_onAddRenderChunk.reportHook()) {
       MinecraftForge.EVENT_BUS.post(new AddRenderChunkEvent(renderChunk, layer));
     }
   }
 
-  public static void onChunkUploaded(RenderChunk chunk, BufferBuilder buffer) {
+  public static void onChunkUploaded(RenderChunk chunk, BufferBuilder.RenderedBuffer buffer) {
     if (HOOK_onChunkUploaded.reportHook()) {
       MinecraftForge.EVENT_BUS.post(new ChunkUploadedEvent(chunk, buffer));
     }
   }
 
   public static void onLoadRenderers(
-      ViewFrustum viewFrustum, ChunkRenderDispatcher renderDispatcher) {
+      ViewArea viewFrustum, ChunkRenderDispatcher renderDispatcher) {
     if (HOOK_onLoadRenderers.reportHook()) {
       MinecraftForge.EVENT_BUS.post(new LoadRenderersEvent(viewFrustum, renderDispatcher));
     }
   }
 
-  public static void onWorldRendererDeallocated(ChunkCompileTaskGenerator generator) {
+  public static void onWorldRendererDeallocated(Object generator, RenderChunk renderChunk) {
     if (HOOK_onWorldRendererDeallocated.reportHook()) {
-      MinecraftForge.EVENT_BUS.post(
-          new WorldRendererDeallocatedEvent(generator, generator.getRenderChunk()));
+      MinecraftForge.EVENT_BUS.post(new WorldRendererDeallocatedEvent(generator, renderChunk));
     }
   }
 
@@ -670,18 +685,18 @@ public class ForgeHaxHooks implements ASMCommon {
     return HOOK_shouldDisableCaveCulling.reportHook() && SHOULD_DISABLE_CAVE_CULLING.isEnabled();
   }
 
-  public static boolean onUpdateWalkingPlayerPre(EntityPlayerSP localPlayer) {
+  public static boolean onUpdateWalkingPlayerPre(LocalPlayer localPlayer) {
     return HOOK_onUpdateWalkingPlayerPre.reportHook()
         && MinecraftForge.EVENT_BUS.post(new LocalPlayerUpdateMovementEvent.Pre(localPlayer));
   }
 
-  public static void onUpdateWalkingPlayerPost(EntityPlayerSP localPlayer) {
+  public static void onUpdateWalkingPlayerPost(LocalPlayer localPlayer) {
     if (HOOK_onUpdateWalkingPlayerPost.reportHook()) {
       MinecraftForge.EVENT_BUS.post(new LocalPlayerUpdateMovementEvent.Post(localPlayer));
     }
   }
 
-  public static boolean onWorldCheckLightFor(EnumSkyBlock enumSkyBlock, BlockPos pos) {
+  public static boolean onWorldCheckLightFor(LightLayer enumSkyBlock, BlockPos pos) {
     return HOOK_onWorldCheckLightFor.reportHook()
         && MinecraftForge.EVENT_BUS.post(new WorldCheckLightForEvent(enumSkyBlock, pos));
   }
@@ -705,21 +720,21 @@ public class ForgeHaxHooks implements ASMCommon {
     }
   }
 
-  public static void onPlayerItemSync(PlayerControllerMP playerControllerMP) {
+  public static void onPlayerItemSync(MultiPlayerGameMode playerControllerMP) {
     if (HOOK_onPlayerItemSync.reportHook()) {
       MinecraftForge.EVENT_BUS.post(new PlayerSyncItemEvent(playerControllerMP));
     }
   }
 
   public static void onPlayerBreakingBlock(
-      PlayerControllerMP playerControllerMP, BlockPos pos, EnumFacing facing) {
+      MultiPlayerGameMode playerControllerMP, BlockPos pos, Direction facing) {
     if (HOOK_onPlayerBreakingBlock.reportHook()) {
       MinecraftForge.EVENT_BUS.post(new PlayerDamageBlockEvent(playerControllerMP, pos, facing));
     }
   }
 
   public static void onPlayerAttackEntity(
-      PlayerControllerMP playerControllerMP, EntityPlayer attacker, Entity victim) {
+      MultiPlayerGameMode playerControllerMP, Player attacker, Entity victim) {
     if (HOOK_onPlayerAttackEntity.reportHook()) {
       MinecraftForge.EVENT_BUS.post(
           new PlayerAttackEntityEvent(playerControllerMP, attacker, victim));
@@ -727,15 +742,15 @@ public class ForgeHaxHooks implements ASMCommon {
   }
 
   public static boolean onPlayerStopUse(
-      PlayerControllerMP playerControllerMP, EntityPlayer player) {
+      MultiPlayerGameMode playerControllerMP, Player player) {
     return HOOK_onPlayerStopUse.reportHook()
         && MinecraftForge.EVENT_BUS.post(new ItemStoppedUsedEvent(playerControllerMP, player));
   }
 
   public static float onEntityBlockSlipApply(
       float defaultSlipperiness,
-      EntityLivingBase entityLivingBase,
-      IBlockState blockStateUnder,
+      LivingEntity entityLivingBase,
+      BlockState blockStateUnder,
       int stage
   ) {
     if (HOOK_onEntityBlockSlipApply.reportHook()) {

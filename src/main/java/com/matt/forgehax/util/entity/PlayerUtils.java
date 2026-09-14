@@ -2,8 +2,8 @@ package com.matt.forgehax.util.entity;
 
 import com.matt.forgehax.Globals;
 import com.matt.forgehax.mods.commands.FriendsCommand;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
 
 import static com.matt.forgehax.Helper.getLocalPlayer;
 
@@ -14,11 +14,11 @@ public class PlayerUtils implements Globals {
    */
   @Deprecated
   public static boolean isLocalPlayer(Entity player) {
-    EntityPlayer localPlayer = getLocalPlayer();
+    Player localPlayer = getLocalPlayer();
     return localPlayer != null && localPlayer.equals(player);
   }
 
-  public static boolean isFriend(EntityPlayer player) {
-    return player != null && FriendsCommand.isFriend(player.getName());
+  public static boolean isFriend(Player player) {
+    return player != null && FriendsCommand.isFriend(player.getGameProfile().getName());
   }
 }

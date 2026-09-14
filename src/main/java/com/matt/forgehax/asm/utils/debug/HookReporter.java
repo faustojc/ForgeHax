@@ -5,7 +5,7 @@ import com.matt.forgehax.asm.events.listeners.ListenerHook;
 import com.matt.forgehax.asm.utils.MultiBoolean;
 import com.matt.forgehax.asm.utils.asmtype.ASMMethod;
 import com.matt.forgehax.util.Immutables;
-import net.minecraftforge.fml.common.eventhandler.Event;
+import net.minecraftforge.eventbus.api.Event;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
@@ -215,7 +215,10 @@ public class HookReporter {
       if (results.size() == 1) {
         return hook(results.get(0));
       } else if (results.size() > 1) {
-        throw new InvalidMethodException("Found two methods with the same name");
+        // this runs inside ForgeHaxHooks.<clinit>, which a mixin triggers mid-tick, so the name
+        // has to be unique - overload a hook and the whole game dies on the first call
+        throw new InvalidMethodException(
+            "Found two methods named " + methodName + " on " + parentClass.getName());
       } else {
         throw new InvalidMethodException("No such method found");
       }

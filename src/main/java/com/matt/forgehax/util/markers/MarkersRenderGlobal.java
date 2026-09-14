@@ -1,38 +1,40 @@
 package com.matt.forgehax.util.markers;
 
 import com.matt.forgehax.Globals;
-import net.minecraft.block.state.IBlockState;
+import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.WorldClient;
-import net.minecraft.client.renderer.BufferBuilder;
-import net.minecraft.client.renderer.RenderGlobal;
-import net.minecraft.client.renderer.Tessellator;
-import net.minecraft.client.renderer.chunk.ChunkRenderDispatcher;
-import net.minecraft.client.renderer.culling.ICamera;
-import net.minecraft.client.resources.IResourceManager;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.tileentity.TileEntity;
-import net.minecraft.util.BlockRenderLayer;
-import net.minecraft.util.SoundCategory;
-import net.minecraft.util.SoundEvent;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.RayTraceResult;
-import net.minecraft.world.World;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.world.item.RecordItem;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import org.joml.Matrix4f;
 
 import javax.annotation.Nullable;
 import java.util.Collection;
 
 /**
  * Created on 7/26/2017 by fr1kin
+ *
+ * 1.12.2 -> 1.20.1: {@code RenderGlobal} was rewritten and renamed to {@link LevelRenderer}.
+ * Chunk/terrain/entity rendering that used to live in overridable public methods is now
+ * private and folded into the giant {@code renderLevel(...)} method, so most of the old
+ * override points below have no equivalent left to override - they were removed rather than
+ * ported. Methods kept here are genuine overrides (renamed to the current LevelRenderer API);
+ * everything that needs a real hook now requires a mixin. See the TODO list at the bottom of
+ * this file for what a later phase must add.
  */
-public class MarkersRenderGlobal extends RenderGlobal implements Globals {
+public class MarkersRenderGlobal extends LevelRenderer implements Globals {
 
   private static final MarkersRenderGlobal INSTANCE = new MarkersRenderGlobal(MC);
-  private final ChunkRenderDispatcher renderDispatcher = null;
 
   public MarkersRenderGlobal(Minecraft mcIn) {
-    super(mcIn);
+    super(mcIn, mcIn.getEntityRenderDispatcher(), mcIn.getBlockEntityRenderDispatcher(), mcIn.renderBuffers());
   }
 
   public static MarkersRenderGlobal getInstance() {
@@ -40,216 +42,172 @@ public class MarkersRenderGlobal extends RenderGlobal implements Globals {
   }
 
   @Override
-  public void onResourceManagerReload(IResourceManager resourceManager) {
+  public void onResourceManagerReload(ResourceManager resourceManager) {
     super.onResourceManagerReload(resourceManager);
   }
 
+  /** Was renderEntityOutlineFramebuffer() in 1.12.2. */
   @Override
-  public void renderEntityOutlineFramebuffer() {
-    super.renderEntityOutlineFramebuffer();
+  public void doEntityOutline() {
+    super.doEntityOutline();
   }
 
+  /** Was protected isRenderEntityOutlines() in 1.12.2; now public. */
   @Override
-  protected boolean isRenderEntityOutlines() {
-    return super.isRenderEntityOutlines();
+  public boolean shouldShowEntityOutlines() {
+    return super.shouldShowEntityOutlines();
   }
 
+  /** Was setWorldAndLoadRenderers(WorldClient) in 1.12.2. */
   @Override
-  public void setWorldAndLoadRenderers(@Nullable WorldClient worldClientIn) {
-    super.setWorldAndLoadRenderers(worldClientIn);
+  public void setLevel(@Nullable ClientLevel worldClientIn) {
+    super.setLevel(worldClientIn);
   }
 
+  /** Was loadRenderers() in 1.12.2. */
   @Override
-  public void loadRenderers() {
-    super.loadRenderers();
+  public void allChanged() {
+    super.allChanged();
   }
 
+  /** Was getDebugInfoRenders() in 1.12.2. */
   @Override
-  protected void stopChunkUpdates() {
-    super.stopChunkUpdates();
+  public String getChunkStatistics() {
+    return super.getChunkStatistics();
   }
 
+  /** Was protected getRenderedChunks() in 1.12.2; now public. */
   @Override
-  public void createBindEntityOutlineFbs(int width, int height) {
-    super.createBindEntityOutlineFbs(width, height);
+  public int countRenderedChunks() {
+    return super.countRenderedChunks();
   }
 
+  /** Was getDebugInfoEntities() in 1.12.2. */
   @Override
-  public void renderEntities(Entity renderViewEntity, ICamera camera, float partialTicks) {
-    super.renderEntities(renderViewEntity, camera, partialTicks);
+  public String getEntityStatistics() {
+    return super.getEntityStatistics();
   }
 
+  /** Signature changed (PoseStack/Matrix4f/Camera/Runnable replace the old float/int params). */
   @Override
-  public String getDebugInfoRenders() {
-    return super.getDebugInfoRenders();
-  }
-
-  @Override
-  protected int getRenderedChunks() {
-    return super.getRenderedChunks();
-  }
-
-  @Override
-  public String getDebugInfoEntities() {
-    return super.getDebugInfoEntities();
-  }
-
-  @Override
-  public void setupTerrain(
-      Entity viewEntity,
-      double partialTicks,
-      ICamera camera,
-      int frameCount,
-      boolean playerSpectator
+  public void renderSky(
+      PoseStack poseStack,
+      Matrix4f projectionMatrix,
+      float partialTicks,
+      Camera camera,
+      boolean isFoggy,
+      Runnable skyFogSetup
   ) {
-    super.setupTerrain(viewEntity, partialTicks, camera, frameCount, playerSpectator);
+    super.renderSky(poseStack, projectionMatrix, partialTicks, camera, isFoggy, skyFogSetup);
   }
 
-  @Override
-  public int renderBlockLayer(
-      BlockRenderLayer blockLayerIn, double partialTicks, int pass, Entity entityIn) {
-    return super.renderBlockLayer(blockLayerIn, partialTicks, pass, entityIn);
-  }
-
-  @Override
-  public void updateClouds() {
-    super.updateClouds();
-  }
-
-  @Override
-  public void renderSky(float partialTicks, int pass) {
-    super.renderSky(partialTicks, pass);
-  }
-
+  /** Signature changed (PoseStack/Matrix4f replace the old float/int/double params). */
   @Override
   public void renderClouds(
-      float partialTicks, int pass, double p_180447_3_, double p_180447_5_, double p_180447_7_) {
-    super.renderClouds(partialTicks, pass, p_180447_3_, p_180447_5_, p_180447_7_);
-  }
-
-  @Override
-  public boolean hasCloudFog(double x, double y, double z, float partialTicks) {
-    return super.hasCloudFog(x, y, z, partialTicks);
-  }
-
-  @Override
-  public void updateChunks(long finishTimeNano) {
-    super.updateChunks(finishTimeNano);
-  }
-
-  @Override
-  public void renderWorldBorder(Entity entityIn, float partialTicks) {
-    super.renderWorldBorder(entityIn, partialTicks);
-  }
-
-  @Override
-  public void drawBlockDamageTexture(
-      Tessellator tessellatorIn,
-      BufferBuilder worldRendererIn,
-      Entity entityIn,
-      float partialTicks
+      PoseStack poseStack,
+      Matrix4f projectionMatrix,
+      float partialTicks,
+      double camX,
+      double camY,
+      double camZ
   ) {
-    super.drawBlockDamageTexture(tessellatorIn, worldRendererIn, entityIn, partialTicks);
+    super.renderClouds(poseStack, projectionMatrix, partialTicks, camX, camY, camZ);
+  }
+
+  /** Was notifyBlockUpdate(World, BlockPos, IBlockState, IBlockState, int); World -> BlockGetter. */
+  @Override
+  public void blockChanged(
+      BlockGetter worldIn, BlockPos pos, BlockState oldState, BlockState newState, int flags) {
+    super.blockChanged(worldIn, pos, oldState, newState, flags);
+  }
+
+  /**
+   * Was the custom (non-override) markBlockRangeForRenderUpdate(...) stub in 1.12.2; in 1.20.1
+   * setBlocksDirty(...) has the identical signature and is a real override.
+   */
+  @Override
+  public void setBlocksDirty(int x1, int y1, int z1, int x2, int y2, int z2) {
+    super.setBlocksDirty(x1, y1, z1, x2, y2, z2);
+  }
+
+  /** Was playRecord(SoundEvent, BlockPos) in 1.12.2. */
+  @Override
+  public void playStreamingMusic(@Nullable SoundEvent soundIn, BlockPos pos) {
+    super.playStreamingMusic(soundIn, pos);
   }
 
   @Override
-  public void drawSelectionBox(
-      EntityPlayer player, RayTraceResult movingObjectPositionIn, int execute, float partialTicks) {
-    super.drawSelectionBox(player, movingObjectPositionIn, execute, partialTicks);
+  public void playStreamingMusic(
+      @Nullable SoundEvent soundIn, BlockPos pos, @Nullable RecordItem musicDiscItem) {
+    super.playStreamingMusic(soundIn, pos, musicDiscItem);
   }
 
+  /** Was broadcastSound(int, BlockPos, int) in 1.12.2. */
   @Override
-  public void notifyBlockUpdate(
-      World worldIn, BlockPos pos, IBlockState oldState, IBlockState newState, int flags) {
-    super.notifyBlockUpdate(worldIn, pos, oldState, newState, flags);
+  public void globalLevelEvent(int soundID, BlockPos pos, int data) {
+    super.globalLevelEvent(soundID, pos, data);
   }
 
+  /** Was playEvent(EntityPlayer, int, BlockPos, int) in 1.12.2; the player param was dropped. */
   @Override
-  public void notifyLightSet(BlockPos pos) {
-    super.notifyLightSet(pos);
+  public void levelEvent(int type, BlockPos blockPosIn, int data) {
+    super.levelEvent(type, blockPosIn, data);
   }
 
-  public void markBlockRangeForRenderUpdate(int x1, int y1, int z1, int x2, int y2, int z2) {
-  }
-
+  /** Was sendBlockBreakProgress(int, BlockPos, int) in 1.12.2. */
   @Override
-  public void playRecord(@Nullable SoundEvent soundIn, BlockPos pos) {
-    super.playRecord(soundIn, pos);
+  public void destroyBlockProgress(int breakerId, BlockPos pos, int progress) {
+    super.destroyBlockProgress(breakerId, pos, progress);
   }
 
+  /** Was hasNoChunkUpdates() in 1.12.2 (inverse-sounding name, same override point). */
   @Override
-  public void playSoundToAllNearExcept(
-      @Nullable EntityPlayer player,
-      SoundEvent soundIn,
-      SoundCategory category,
-      double x,
-      double y,
-      double z,
-      float volume,
-      float pitch
-  ) {
-    super.playSoundToAllNearExcept(player, soundIn, category, x, y, z, volume, pitch);
+  public boolean hasRenderedAllChunks() {
+    return super.hasRenderedAllChunks();
   }
 
+  /** Was setDisplayListEntitiesDirty() in 1.12.2. */
   @Override
-  public void spawnParticle(
-      int id,
-      boolean ignoreRange,
-      boolean p_190570_3_,
-      double x,
-      double y,
-      double z,
-      double xSpeed,
-      double ySpeed,
-      double zSpeed,
-      int... parameters
-  ) {
-    super.spawnParticle(id, ignoreRange, p_190570_3_, x, y, z, xSpeed, ySpeed, zSpeed, parameters);
+  public void needsUpdate() {
+    super.needsUpdate();
   }
 
+  /** Was updateTileEntities(Collection<TileEntity>, Collection<TileEntity>) in 1.12.2. */
   @Override
-  public void onEntityAdded(Entity entityIn) {
-    super.onEntityAdded(entityIn);
+  public void updateGlobalBlockEntities(
+      Collection<BlockEntity> tileEntitiesToRemove, Collection<BlockEntity> tileEntitiesToAdd) {
+    super.updateGlobalBlockEntities(tileEntitiesToRemove, tileEntitiesToAdd);
   }
 
-  @Override
-  public void onEntityRemoved(Entity entityIn) {
-    super.onEntityRemoved(entityIn);
-  }
-
-  @Override
-  public void deleteAllDisplayLists() {
-    super.deleteAllDisplayLists();
-  }
-
-  @Override
-  public void broadcastSound(int soundID, BlockPos pos, int data) {
-    super.broadcastSound(soundID, pos, data);
-  }
-
-  @Override
-  public void playEvent(EntityPlayer player, int type, BlockPos blockPosIn, int data) {
-    super.playEvent(player, type, blockPosIn, data);
-  }
-
-  @Override
-  public void sendBlockBreakProgress(int breakerId, BlockPos pos, int progress) {
-    super.sendBlockBreakProgress(breakerId, pos, progress);
-  }
-
-  @Override
-  public boolean hasNoChunkUpdates() {
-    return super.hasNoChunkUpdates();
-  }
-
-  @Override
-  public void setDisplayListEntitiesDirty() {
-    super.setDisplayListEntitiesDirty();
-  }
-
-  @Override
-  public void updateTileEntities(
-      Collection<TileEntity> tileEntitiesToRemove, Collection<TileEntity> tileEntitiesToAdd) {
-    super.updateTileEntities(tileEntitiesToRemove, tileEntitiesToAdd);
-  }
+  // TODO(1.20.1): the following 1.12.2 RenderGlobal override points have no equivalent public/
+  // protected method left on LevelRenderer to override - the logic was folded into private
+  // methods (mostly the giant renderLevel(...)). Actually hooking these requires a mixin into
+  // LevelRenderer (or ChunkRenderDispatcher for the chunk-compile ones) rather than a subclass
+  // override. Left out of this class entirely; a later phase adds the mixins:
+  //   - stopChunkUpdates()                              -> chunk update queue is now private
+  //   - createBindEntityOutlineFbs(int, int)             -> entity outline RTs sized internally
+  //                                                          by initOutline()/resize(int,int)
+  //   - renderEntities(Entity, ICamera, float)           -> folded into renderLevel(...)
+  //   - setupTerrain(Entity, double, ICamera, int, bool) -> replaced by private setupRender(...)
+  //   - renderBlockLayer(BlockRenderLayer, double, int, Entity)
+  //                                                       -> private renderChunkLayer(RenderType, ...)
+  //   - updateClouds()                                   -> cloud geometry rebuilt inline in
+  //                                                          renderClouds(...)
+  //   - hasCloudFog(double, double, double, float)        -> no equivalent found on LevelRenderer
+  //   - updateChunks(long)                               -> replaced by private compileChunks(Camera)
+  //   - renderWorldBorder(Entity, float)                 -> private renderWorldBorder(Camera)
+  //   - drawBlockDamageTexture(Tessellator, BufferBuilder, Entity, float)
+  //                                                       -> folded into renderLevel(...)
+  //   - drawSelectionBox(EntityPlayer, RayTraceResult, int, float)
+  //                                                       -> private renderHitOutline(...)
+  //   - notifyLightSet(BlockPos)                         -> no equivalent found on LevelRenderer
+  //   - playSoundToAllNearExcept(EntityPlayer, SoundEvent, SoundCategory, double, double, double,
+  //     float, float)                                    -> moved off LevelRenderer entirely (now
+  //                                                          on SoundManager)
+  //   - spawnParticle(int id, boolean, boolean, double..., int...)
+  //                                                       -> addParticle(ParticleOptions, ...) uses
+  //                                                          a completely different particle API
+  //   - onEntityAdded(Entity) / onEntityRemoved(Entity)  -> no equivalent found on LevelRenderer
+  //   - deleteAllDisplayLists()                          -> display lists don't exist anymore,
+  //                                                          concept is obsolete
 }

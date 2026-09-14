@@ -1,11 +1,9 @@
 package com.matt.forgehax.mods.commands;
 
-import com.matt.forgehax.util.PacketHelper;
 import com.matt.forgehax.util.command.Command;
 import com.matt.forgehax.util.command.CommandBuilders;
 import com.matt.forgehax.util.mod.CommandMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.network.play.client.CPacketChatMessage;
 
 import java.util.Arrays;
 
@@ -45,9 +43,12 @@ public class SayCommand extends CommandMod {
                   msg = new StringBuilder().appendCodePoint(fakePrefix).append(msg).toString();
                 }
                 if (data.hasOption("local")) {
-                  getLocalPlayer().sendChatMessage(msg);
+                  getLocalPlayer().connection.sendChat(msg);
                 } else {
-                  PacketHelper.ignoreAndSend(new CPacketChatMessage(msg));
+                  // TODO(1.20.1): raw CPacketChatMessage bypass is gone; chat packets now
+                  // require signing (ServerboundChatPacket + LastSeenMessages state), so
+                  // the "fake" no-echo send falls back to the normal signed path.
+                  getLocalPlayer().connection.sendChat(msg);
                 }
               }
             }

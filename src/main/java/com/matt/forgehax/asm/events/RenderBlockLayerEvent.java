@@ -1,20 +1,20 @@
 package com.matt.forgehax.asm.events;
 
-import net.minecraft.util.BlockRenderLayer;
-import net.minecraftforge.fml.common.eventhandler.Cancelable;
-import net.minecraftforge.fml.common.eventhandler.Event;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraftforge.eventbus.api.Cancelable;
+import net.minecraftforge.eventbus.api.Event;
 
 public class RenderBlockLayerEvent extends Event {
 
-  private final BlockRenderLayer renderLayer;
+  private final RenderType renderLayer;
   private final double partialTicks;
 
-  public RenderBlockLayerEvent(BlockRenderLayer renderLayer, double partialTicks) {
+  public RenderBlockLayerEvent(RenderType renderLayer, double partialTicks) {
     this.renderLayer = renderLayer;
     this.partialTicks = partialTicks;
   }
 
-  public BlockRenderLayer getRenderLayer() {
+  public RenderType getRenderLayer() {
     return renderLayer;
   }
 
@@ -25,14 +25,14 @@ public class RenderBlockLayerEvent extends Event {
   @Cancelable
   public static class Pre extends RenderBlockLayerEvent {
 
-    public Pre(BlockRenderLayer renderLayer, double partialTicks) {
+    public Pre(RenderType renderLayer, double partialTicks) {
       super(renderLayer, partialTicks);
     }
   }
 
   public static class Post extends RenderBlockLayerEvent {
 
-    public Post(BlockRenderLayer renderLayer, double partialTicks) {
+    public Post(RenderType renderLayer, double partialTicks) {
       super(renderLayer, partialTicks);
     }
   }

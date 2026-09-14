@@ -11,16 +11,18 @@ import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
 import com.mojang.authlib.GameProfile;
-import net.minecraft.client.entity.EntityOtherPlayerMP;
-import net.minecraft.entity.Entity;
-import net.minecraft.network.play.client.CPacketInput;
-import net.minecraft.network.play.client.CPacketPlayer;
-import net.minecraft.network.play.server.SPacketPlayerPosLook;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.World;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.RemotePlayer;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket;
+import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.client.event.RenderLivingEvent;
-import net.minecraftforge.event.world.WorldEvent;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.client.event.RenderNameTagEvent;
+import net.minecraftforge.event.level.LevelEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import static com.matt.forgehax.Helper.getLocalPlayer;
 import static com.matt.forgehax.Helper.getWorld;
@@ -42,13 +44,13 @@ public class FreecamMod extends ToggleMod {
 
   private final Handle flying = LocalPlayerUtils.getFlySwitch().createHandle(getModName());
 
-  private Vec3d pos = Vec3d.ZERO;
+  private Vec3 pos = Vec3.ZERO;
   private Angle angle = Angle.ZERO;
 
   private boolean isRidingEntity;
   private Entity ridingEntity;
 
-  private EntityOtherPlayerMP originalPlayer;
+  private RemotePlayer originalPlayer;
 
   public FreecamMod() {
     super(Category.PLAYER, "Freecam", false, "Freecam mode");
@@ -60,21 +62,23 @@ public class FreecamMod extends ToggleMod {
       return;
     }
 
-    if (isRidingEntity = getLocalPlayer().isRiding()) {
-      ridingEntity = getLocalPlayer().getRidingEntity();
-      getLocalPlayer().dismountRidingEntity();
+    if (isRidingEntity = getLocalPlayer().isPassenger()) {
+      ridingEntity = getLocalPlayer().getVehicle();
+      getLocalPlayer().stopRiding();
     } else {
-      pos = getLocalPlayer().getPositionVector();
+      pos = getLocalPlayer().position();
     }
 
     angle = LocalPlayerUtils.getViewAngles();
 
-    originalPlayer = new EntityOtherPlayerMP(getWorld(), getLocalPlayer().getGameProfile());
-    originalPlayer.copyLocationAndAnglesFrom(getLocalPlayer());
-    originalPlayer.rotationYawHead = getLocalPlayer().rotationYawHead;
-    originalPlayer.inventory = getLocalPlayer().inventory;
-    originalPlayer.inventoryContainer = getLocalPlayer().inventoryContainer;
-    getWorld().addEntityToWorld(-100, originalPlayer);
+    originalPlayer = new RemotePlayer(getWorld(), getLocalPlayer().getGameProfile());
+    originalPlayer.copyPosition(getLocalPlayer());
+    originalPlayer.setYHeadRot(getLocalPlayer().getYHeadRot());
+    originalPlayer.getInventory().replaceWith(getLocalPlayer().getInventory());
+    // TODO(1.20.1): Player#inventoryMenu is final with no clone helper, so the dummy player's
+    // container state (open crafting/inventory screen) can no longer be mirrored from here.
+    originalPlayer.setId(-100);
+    getWorld().addPlayer(-100, originalPlayer);
   }
 
   @Override
@@ -85,12 +89,12 @@ public class FreecamMod extends ToggleMod {
       return;
     }
 
-    getLocalPlayer().setPositionAndRotation(pos.x, pos.y, pos.z, angle.getYaw(), angle.getPitch());
-    getWorld().removeEntityFromWorld(-100);
+    getLocalPlayer().moveTo(pos.x, pos.y, pos.z, angle.getYaw(), angle.getPitch());
+    getWorld().removeEntity(-100, Entity.RemovalReason.DISCARDED);
     originalPlayer = null;
 
-    getLocalPlayer().noClip = false;
-    getLocalPlayer().setVelocity(0, 0, 0);
+    getLocalPlayer().noPhysics = false;
+    getLocalPlayer().setDeltaMovement(Vec3.ZERO);
 
     if (isRidingEntity) {
       getLocalPlayer().startRiding(ridingEntity, true);
@@ -105,9 +109,9 @@ public class FreecamMod extends ToggleMod {
     }
 
     flying.enable();
-    getLocalPlayer().capabilities.setFlySpeed(speed.getAsFloat());
-    getLocalPlayer().noClip = true;
-    getLocalPlayer().onGround = false;
+    getLocalPlayer().getAbilities().setFlyingSpeed(speed.getAsFloat());
+    getLocalPlayer().noPhysics = true;
+    getLocalPlayer().setOnGround(false);
     getLocalPlayer().fallDistance = 0;
 
     if (!Bindings.forward.isPressed()
@@ -116,13 +120,14 @@ public class FreecamMod extends ToggleMod {
         && !Bindings.right.isPressed()
         && !Bindings.jump.isPressed()
         && !Bindings.sneak.isPressed()) {
-      getLocalPlayer().setVelocity(0, 0, 0);
+      getLocalPlayer().setDeltaMovement(Vec3.ZERO);
     }
   }
 
   @SubscribeEvent
   public void onPacketSend(PacketEvent.Outgoing.Pre event) {
-    if (event.getPacket() instanceof CPacketPlayer || event.getPacket() instanceof CPacketInput) {
+    if (event.getPacket() instanceof ServerboundMovePlayerPacket
+        || event.getPacket() instanceof ServerboundPlayerInputPacket) {
       event.setCanceled(true);
     }
   }
@@ -133,26 +138,26 @@ public class FreecamMod extends ToggleMod {
       return;
     }
 
-    if (event.getPacket() instanceof SPacketPlayerPosLook) {
-      SPacketPlayerPosLook packet = event.getPacket();
-      pos = new Vec3d(packet.getX(), packet.getY(), packet.getZ());
-      angle = Angle.degrees(packet.getPitch(), packet.getYaw());
+    if (event.getPacket() instanceof ClientboundPlayerPositionPacket) {
+      ClientboundPlayerPositionPacket packet = event.getPacket();
+      pos = new Vec3(packet.getX(), packet.getY(), packet.getZ());
+      angle = Angle.degrees(packet.getXRot(), packet.getYRot());
       event.setCanceled(true);
     }
   }
 
   @SubscribeEvent
-  public void onWorldLoad(WorldEvent.Load event) {
+  public void onWorldLoad(LevelEvent.Load event) {
     if (originalPlayer == null || getLocalPlayer() == null) {
       return;
     }
 
-    pos = getLocalPlayer().getPositionVector();
+    pos = getLocalPlayer().position();
     angle = LocalPlayerUtils.getViewAngles();
   }
 
   @SubscribeEvent
-  public void onEntityRender(RenderLivingEvent.Pre<?> event) {
+  public void onEntityRender(RenderLivingEvent.Pre<?, ?> event) {
     if (originalPlayer != null
         && getLocalPlayer() != null
         && getLocalPlayer().equals(event.getEntity())) {
@@ -161,26 +166,26 @@ public class FreecamMod extends ToggleMod {
   }
 
   @SubscribeEvent
-  public void onRenderTag(RenderLivingEvent.Specials.Pre event) {
+  public void onRenderTag(RenderNameTagEvent event) {
     if (originalPlayer != null
         && getLocalPlayer() != null
         && getLocalPlayer().equals(event.getEntity())) {
-      event.setCanceled(true);
+      event.setContent(Component.empty());
     }
   }
 
-  private static class DummyPlayer extends EntityOtherPlayerMP {
+  private static class DummyPlayer extends RemotePlayer {
 
-    public DummyPlayer(World worldIn, GameProfile gameProfileIn) {
-      super(worldIn, gameProfileIn);
+    public DummyPlayer(ClientLevel levelIn, GameProfile gameProfileIn) {
+      super(levelIn, gameProfileIn);
     }
 
     @Override
-    public void onUpdate() {
+    public void tick() {
     }
 
     @Override
-    public void onLivingUpdate() {
+    public void aiStep() {
     }
   }
 }

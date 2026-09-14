@@ -1,152 +1,130 @@
-import org.apache.tools.ant.filters.ReplaceTokens
+plugins {
+  id 'eclipse'
+  id 'idea'
+  id 'maven-publish'
+  id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+  id 'org.spongepowered.mixin' version '0.7.+'
+}
 
-buildscript {
-  repositories {
-    jcenter()
-    maven { url "http://files.minecraftforge.net/maven" }
-    maven { url "https://plugins.gradle.org/m2/" }
+version = project.property('forgehax.version')
+group = 'com.matt.forgehax'
+
+base {
+  archivesName = "forgehax-${project.property('minecraft.version')}"
+}
+
+java {
+  toolchain.languageVersion = JavaLanguageVersion.of(17)
+}
+
+mixin {
+  add sourceSets.main, 'forgehax.refmap.json'
+  config 'forgehax.mixins.json'
+}
+
+// 1.20.1 migration: only the core module set is compiled while the port lands.
+// Excluded files stay on disk; drop a name back into coreMods to re-enable it.
+def coreMods = [
+    'ActiveModList', 'Aimbot', 'AutoReconnectMod', 'AutoSprintMod', 'AutoTool',
+    'ChamsMod', 'CoordsHud', 'Criticals', 'ESP', 'FlyMod', 'FreecamMod',
+    'FullBrightMod', 'ItemESP', 'Jesus', 'KillAura', 'NoFallMod', 'NoSlowdown',
+    'NoclipMod', 'Nuker', 'SafeWalkMod', 'Scaffold', 'StepMod', 'StorageESPMod',
+    'Targets', 'TimerMod', 'Tracers', 'XrayMod'
+]
+
+sourceSets.main.java {
+  exclude 'com/matt/forgehax/asm/patches/**'
+  exclude 'com/matt/forgehax/asm/utils/transforming/**'
+  exclude 'com/matt/forgehax/asm/reflection/**'
+  // Schematica (com.github.lunatrius.schematica) has no 1.20.1 release, so nothing can
+  // resolve against it; the modules that used it are excluded below anyway.
+  exclude 'com/matt/forgehax/util/schematica/**'
+  exclude { el ->
+    def prefix = 'com/matt/forgehax/mods/'
+    def path = el.path
+    el.file.isFile() && path.startsWith(prefix) &&
+        !path.substring(prefix.length()).contains('/') &&
+        !coreMods.contains(el.file.name - '.java')
   }
-  dependencies {
-    classpath 'net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT'
+}
+
+minecraft {
+  mappings channel: 'official', version: project.property('minecraft.version')
+
+  runs {
+    configureEach {
+      workingDirectory project.file('run')
+      property 'forge.logging.markers', 'REGISTRIES'
+      property 'forge.logging.console.level', 'debug'
+
+      mods {
+        forgehax {
+          source sourceSets.main
+        }
+      }
+    }
+
+    client {}
   }
 }
 
 repositories {
   mavenCentral()
-  maven { url "https://oss.sonatype.org/content/groups/public/" }
-}
-
-apply plugin: 'java'
-apply plugin: 'idea'
-apply plugin: 'net.minecraftforge.gradle.forge'
-
-sourceCompatibility = targetCompatibility = '1.8'
-
-group 'com.matt.forgehax'
-version project.property('forgehax.version')
-
-archivesBaseName = "forgehax-" + project.property('forgehax.mc.version')
-
-configurations.all {
-  resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
-}
-
-sourceSets {
-  schematica_api {
-    compileClasspath += main.compileClasspath
-  }
-
-  main {
-    compileClasspath += schematica_api.output
-  }
-}
-
-minecraft {
-  version = project.property('forgehax.forge.version')
-  runDir = "run"
-
-  // channel_mapping
-  mappings = "${project.property('forgehax.mcp.channel')}_${project.property('forgehax.mcp.mapping')}"
 }
 
 dependencies {
-  testCompile group: 'junit', name: 'junit', version: '4.12'
-  testCompile group: 'org.mockito', name: 'mockito-core', version: '2.15.0'
+  minecraft "net.minecraftforge:forge:${project.property('minecraft.version')}-${project.property('forge.version')}"
+
+  // Mixin's annotation processor generates forgehax.refmap.json; without it the mixin
+  // configs resolve nothing under production (SRG) names.
+  annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+
+  testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.mockito:mockito-core:5.14.2'
 }
 
+tasks.named('processResources', ProcessResources).configure {
+  def replaceProperties = [
+      mod_id                 : 'forgehax',
+      mod_name               : 'ForgeHax',
+      mod_version            : project.version,
+      mod_license            : 'MIT',
+      mod_authors            : 'fr1kin, Babbaj, Chunkr',
+      mod_description        : 'Hax 4 Forge',
+      forgehax_version       : project.version,
+      forgehax_mc_version    : project.property('minecraft.version'),
+      forgehax_forge_version : project.property('forge.version'),
+      forgehax_mcp_version   : project.property('minecraft.version'),
+      forgehax_mcp_channel   : 'official',
+      forgehax_mcp_mapping   : project.property('minecraft.version'),
+      forge_version_range    : project.property('forge.version.range'),
+      loader_version_range   : project.property('loader.version.range'),
+      minecraft_version_range: project.property('minecraft.version.range')
+  ]
 
+  inputs.properties replaceProperties
+  filesMatching(['META-INF/mods.toml', 'pack.mcmeta', 'config.properties']) {
+    expand replaceProperties + [project: project]
+  }
+}
+
+tasks.withType(JavaCompile).configureEach {
+  options.encoding = 'UTF-8'
+  options.compilerArgs << '-Xmaxerrs' << '5000'
+}
 
 jar {
   manifest {
-    attributes(
-      'FMLCorePlugin': 'com.matt.forgehax.asm.ForgeHaxCoreMod',
-      'FMLCorePluginContainsFMLMod': 'true'
-    )
+    attributes([
+        'Specification-Title'     : 'ForgeHax',
+        'Specification-Vendor'    : 'ForgeHax',
+        'Specification-Version'   : '1',
+        'Implementation-Title'    : project.name,
+        'Implementation-Version'  : project.jar.archiveVersion,
+        'Implementation-Vendor'   : 'ForgeHax',
+        'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+    ])
   }
 }
 
-processResources {
-  // this will ensure that this task is redone when the versions change.
-  inputs.property "version", project.version
-  inputs.property "mcversion", project.minecraft.version
-
-  // replace stuff in mcmod.info, nothing else
-  from(sourceSets.main.resources.srcDirs) {
-    include 'mcmod.info'
-
-    // replace version and mcversion
-    expand 'version': project.version, 'mcversion': project.minecraft.version
-  }
-
-  // copy everything else, thats not the mcmod.info
-  from(sourceSets.main.resources.srcDirs) {
-    exclude 'mcmod.info'
-  }
-
-  filesMatching('**/*.properties') {
-    it.filter ReplaceTokens, tokens: [
-      "forgehax.version"      : project.property("forgehax.version"),
-      "forgehax.mc.version"   : project.property("forgehax.mc.version"),
-      "forgehax.forge.version": project.property("forgehax.forge.version"),
-      "forgehax.mcp.version"  : project.property("forgehax.mcp.version"),
-      "forgehax.mcp.channel"  : project.property("forgehax.mcp.channel"),
-      "forgehax.mcp.mapping"  : project.property("forgehax.mcp.mapping")
-    ]
-  }
-}
-
-
-task setGameDir() {
-  // Check if custom gamedir has been passed, if not use default ones per platform
-  if (!project.hasProperty("gameDir")) {
-    if (org.gradle.internal.os.OperatingSystem.current().isWindows()) {
-      project.ext.gameDir = System.getenv("APPDATA") + "/.minecraft"
-    } else if (org.gradle.internal.os.OperatingSystem.current().isMacOsX()) {
-      project.ext.gameDir = System.properties["user.home"] + "/Library/Application Support/minecraft"
-    } else {
-      project.ext.gameDir = System.properties["user.home"] + "/.minecraft"
-    }
-  }
-}
-
-class CopyJarTask extends DefaultTask {
-  @TaskAction
-  protected void exec() {
-    project.copy {
-      final gameDir = project.ext.gameDir;
-      final minecraft = project.minecraft;
-      final modDir = "$gameDir/mods/" + minecraft.version
-
-      // find previous jar (if it exists)
-      final previousJars = project.fileTree(dir: modDir).matching {
-        include project.archivesBaseName + '*'
-      }.files
-
-      // change file name
-      if (previousJars) {
-        // create .backups folder
-        final backupDir = modDir + '/.backups/'
-        project.file(backupDir).mkdirs()
-
-        for (File previousJar : previousJars) {
-          final n = modDir + '/.backups/' + previousJar.getName() + '.bk'
-          def f = project.file(n)
-          def i = 1
-          while (f.exists()) {
-            f = project.file(n + '_' + i)
-            i++
-          }
-          previousJar.renameTo(f)
-        }
-      }
-
-      // copy forgehax jar from libs to forge mod folder
-      from project.jar
-      into "$gameDir/mods/" + minecraft.version
-    }
-  }
-}
-
-task copyJar(type: CopyJarTask, dependsOn: [setGameDir])
-
-build.finalizedBy copyJar
+jar.finalizedBy('reobfJar')

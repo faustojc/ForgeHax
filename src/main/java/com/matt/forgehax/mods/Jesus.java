@@ -2,21 +2,22 @@ package com.matt.forgehax.mods;
 
 import com.matt.forgehax.asm.events.AddCollisionBoxToListEvent;
 import com.matt.forgehax.asm.events.PacketEvent;
-import com.matt.forgehax.asm.reflection.FastReflection;
+import com.matt.forgehax.util.PacketHelper;
 import com.matt.forgehax.events.LocalPlayerUpdateEvent;
 import com.matt.forgehax.util.entity.EntityUtils;
 import com.matt.forgehax.util.mod.BaseMod;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.block.BlockLiquid;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.item.EntityBoat;
-import net.minecraft.network.play.client.CPacketPlayer;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.MathHelper;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.vehicle.Boat;
+import net.minecraft.world.level.block.LiquidBlock;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import static com.matt.forgehax.Helper.*;
 import static com.matt.forgehax.util.entity.EntityUtils.isAboveWater;
@@ -28,26 +29,25 @@ import static com.matt.forgehax.util.entity.EntityUtils.isInWater;
 @RegisterMod
 public class Jesus extends ToggleMod {
 
-  private static final AxisAlignedBB WATER_WALK_AA =
-      new AxisAlignedBB(0.D, 0.D, 0.D, 1.D, 0.99D, 1.D);
+  private static final AABB WATER_WALK_AA =
+      new AABB(0.D, 0.D, 0.D, 1.D, 0.99D, 1.D);
 
   public Jesus() {
     super(Category.PLAYER, "Jesus", false, "Walk on water");
   }
 
-  @SuppressWarnings("deprecation")
   private static boolean isAboveLand(Entity entity) {
     if (entity == null) {
       return false;
     }
 
-    double y = entity.posY - 0.01;
+    double y = entity.getY() - 0.01;
 
-    for (int x = MathHelper.floor(entity.posX); x < MathHelper.ceil(entity.posX); x++) {
-      for (int z = MathHelper.floor(entity.posZ); z < MathHelper.ceil(entity.posZ); z++) {
-        BlockPos pos = new BlockPos(x, MathHelper.floor(y), z);
+    for (int x = Mth.floor(entity.getX()); x < Mth.ceil(entity.getX()); x++) {
+      for (int z = Mth.floor(entity.getZ()); z < Mth.ceil(entity.getZ()); z++) {
+        BlockPos pos = new BlockPos(x, Mth.floor(y), z);
 
-        if (getWorld().getBlockState(pos).getBlock().isFullBlock(getWorld().getBlockState(pos))) {
+        if (!getWorld().getBlockState(pos).getCollisionShape(getWorld(), pos).isEmpty()) {
           return true;
         }
       }
@@ -57,17 +57,19 @@ public class Jesus extends ToggleMod {
   }
 
   private static boolean isAboveBlock(Entity entity, BlockPos pos) {
-    return entity.posY >= pos.getY();
+    return entity.getY() >= pos.getY();
   }
 
   @SubscribeEvent
   public void onLocalPlayerUpdate(LocalPlayerUpdateEvent event) {
     if (!getModManager().get(FreecamMod.class).map(BaseMod::isEnabled).orElse(false)) {
-      if (isInWater(getLocalPlayer()) && !getLocalPlayer().isSneaking()) {
-        getLocalPlayer().motionY = 0.1;
-        if (getLocalPlayer().getRidingEntity() != null
-            && !(getLocalPlayer().getRidingEntity() instanceof EntityBoat)) {
-          getLocalPlayer().getRidingEntity().motionY = 0.3;
+      if (isInWater(getLocalPlayer()) && !getLocalPlayer().isShiftKeyDown()) {
+        Vec3 motion = getLocalPlayer().getDeltaMovement();
+        getLocalPlayer().setDeltaMovement(motion.x, 0.1, motion.z);
+        Entity vehicle = getLocalPlayer().getVehicle();
+        if (vehicle != null && !(vehicle instanceof Boat)) {
+          Vec3 vehicleMotion = vehicle.getDeltaMovement();
+          vehicle.setDeltaMovement(vehicleMotion.x, 0.3, vehicleMotion.z);
         }
       }
     }
@@ -76,16 +78,16 @@ public class Jesus extends ToggleMod {
   @SubscribeEvent
   public void onAddCollisionBox(AddCollisionBoxToListEvent event) {
     if (getLocalPlayer() != null
-        && (event.getBlock() instanceof BlockLiquid)
+        && (event.getBlock() instanceof LiquidBlock)
         && (EntityUtils.isDrivenByPlayer(event.getEntity())
         || EntityUtils.isLocalPlayer(event.getEntity()))
-        && !(event.getEntity() instanceof EntityBoat)
-        && !getLocalPlayer().isSneaking()
+        && !(event.getEntity() instanceof Boat)
+        && !getLocalPlayer().isShiftKeyDown()
         && getLocalPlayer().fallDistance < 3
         && !isInWater(getLocalPlayer())
         && (isAboveWater(getLocalPlayer(), false) || isAboveWater(getRidingEntity(), false))
         && isAboveBlock(getLocalPlayer(), event.getPos())) {
-      AxisAlignedBB axisalignedbb = WATER_WALK_AA.offset(event.getPos());
+      AABB axisalignedbb = WATER_WALK_AA.move(event.getPos());
       if (event.getEntityBox().intersects(axisalignedbb)) {
         event.getCollidingBoxes().add(axisalignedbb);
       }
@@ -96,14 +98,22 @@ public class Jesus extends ToggleMod {
 
   @SubscribeEvent
   public void onPacketSending(PacketEvent.Outgoing.Pre event) {
-    if (event.getPacket() instanceof CPacketPlayer) {
-      if (isAboveWater(getLocalPlayer(), true)
+    if (event.getPacket() instanceof ServerboundMovePlayerPacket) {
+      ServerboundMovePlayerPacket packet = event.getPacket();
+      if (packet.hasPosition()
+          && isAboveWater(getLocalPlayer(), true)
           && !isInWater(getLocalPlayer())
           && !isAboveLand(getLocalPlayer())) {
-        int ticks = getLocalPlayer().ticksExisted % 2;
-        double y = FastReflection.Fields.CPacketPlayer_y.get(event.getPacket());
+        int ticks = getLocalPlayer().tickCount % 2;
         if (ticks == 0) {
-          FastReflection.Fields.CPacketPlayer_y.set(event.getPacket(), y + 0.02D);
+          double y = packet.getY(0) + 0.02D;
+          ServerboundMovePlayerPacket replacement = packet.hasRotation()
+              ? new ServerboundMovePlayerPacket.PosRot(
+                  packet.getX(0), y, packet.getZ(0), packet.getYRot(0), packet.getXRot(0), packet.isOnGround())
+              : new ServerboundMovePlayerPacket.Pos(packet.getX(0), y, packet.getZ(0), packet.isOnGround());
+          PacketHelper.ignore(replacement);
+          getNetworkManager().send(replacement);
+          event.setCanceled(true);
         }
       }
     }

@@ -10,16 +10,24 @@ import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
 import com.matt.forgehax.util.tesselation.GeometryMasks;
 import com.matt.forgehax.util.tesselation.GeometryTessellator;
-import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.item.EntityItemFrame;
-import net.minecraft.entity.item.EntityMinecartChest;
-import net.minecraft.item.ItemShulkerBox;
-import net.minecraft.tileentity.*;
-import net.minecraft.util.math.BlockPos;
-import net.minecraftforge.event.world.WorldEvent;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import org.lwjgl.opengl.GL11;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.decoration.ItemFrame;
+import net.minecraft.world.entity.vehicle.MinecartChest;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.level.block.ShulkerBoxBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.block.entity.DispenserBlockEntity;
+import net.minecraft.world.level.block.entity.EnderChestBlockEntity;
+import net.minecraft.world.level.block.entity.FurnaceBlockEntity;
+import net.minecraft.world.level.block.entity.HopperBlockEntity;
+import net.minecraft.world.level.block.entity.ShulkerBoxBlockEntity;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraftforge.event.level.LevelEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -62,27 +70,29 @@ public class StorageESPMod extends ToggleMod {
     super(Category.RENDER, "StorageESP", false, "Shows storage");
   }
 
-  private int getTileEntityColor(TileEntity tileEntity) {
-    if (tileEntity instanceof TileEntityChest
-        || tileEntity instanceof TileEntityDispenser
-        || tileEntity instanceof TileEntityShulkerBox) {
+  private int getTileEntityColor(BlockEntity tileEntity) {
+    if (tileEntity instanceof ChestBlockEntity
+        || tileEntity instanceof DispenserBlockEntity
+        || tileEntity instanceof ShulkerBoxBlockEntity) {
       return Colors.ORANGE.toBuffer();
-    } else if (tileEntity instanceof TileEntityEnderChest) {
+    } else if (tileEntity instanceof EnderChestBlockEntity) {
       return Colors.PURPLE.toBuffer();
-    } else if (tileEntity instanceof TileEntityFurnace) {
+    } else if (tileEntity instanceof FurnaceBlockEntity) {
       return Colors.GRAY.toBuffer();
-    } else if (tileEntity instanceof TileEntityHopper) {
+    } else if (tileEntity instanceof HopperBlockEntity) {
       return Colors.DARK_RED.toBuffer();
     }
     return -1;
   }
 
   private int getEntityColor(Entity entity) {
-    if (entity instanceof EntityMinecartChest) {
+    if (entity instanceof MinecartChest) {
       return Colors.ORANGE.toBuffer();
-    } else if (entity instanceof EntityItemFrame
-        && ((EntityItemFrame) entity).getDisplayedItem().getItem() instanceof ItemShulkerBox) {
-      return Colors.YELLOW.toBuffer();
+    } else if (entity instanceof ItemFrame) {
+      Item item = ((ItemFrame) entity).getItem().getItem();
+      if (item instanceof BlockItem && ((BlockItem) item).getBlock() instanceof ShulkerBoxBlock) {
+        return Colors.YELLOW.toBuffer();
+      }
     }
     return -1;
   }
@@ -107,13 +117,16 @@ public class StorageESPMod extends ToggleMod {
     }
     ticks = 0;
     refresh();
-    if (getWorld().getTotalWorldTime() % 100L < refreshTicks.get()) {
+    if (getWorld().getGameTime() % 100L < refreshTicks.get()) {
       cache.flush();
     }
   }
 
   private void ensureCache() {
-    Path expected = PersistentBlockCache.pathFor("storage", getWorld().provider.getDimension());
+    // Dimension no longer has an int id in 1.20.1; use the dimension key's hash as a stable
+    // per-dimension bucket for the on-disk cache file name.
+    Path expected =
+        PersistentBlockCache.pathFor("storage", getWorld().dimension().location().hashCode());
     if (!expected.equals(cachePath)) {
       cachePath = expected;
       cache.open(expected);
@@ -121,20 +134,35 @@ public class StorageESPMod extends ToggleMod {
   }
 
   private void refresh() {
-    for (TileEntity tileEntity : getWorld().loadedTileEntityList) {
-      int color = getTileEntityColor(tileEntity);
-      if (color != -1) {
-        cache.put(tileEntity.getPos(), color);
+    // ClientChunkCache exposes no "all loaded chunks" iterator in 1.20.1, so walk the
+    // cache/view radius around the player instead, same as the nearby-cache scan below.
+    ChunkPos center = new ChunkPos(getLocalPlayer().blockPosition());
+    int radius = (distance.get() >> 4) + 1;
+    for (int cx = center.x - radius; cx <= center.x + radius; cx++) {
+      for (int cz = center.z - radius; cz <= center.z + radius; cz++) {
+        if (!getWorld().getChunkSource().hasChunk(cx, cz)) {
+          continue;
+        }
+        LevelChunk chunk = getWorld().getChunkSource().getChunkNow(cx, cz);
+        if (chunk == null) {
+          continue;
+        }
+        for (BlockEntity tileEntity : chunk.getBlockEntities().values()) {
+          int color = getTileEntityColor(tileEntity);
+          if (color != -1) {
+            cache.put(tileEntity.getBlockPos(), color);
+          }
+        }
       }
     }
 
     List<BlockPos> stale = new ArrayList<>();
     cache.forEachNearby(
-        getLocalPlayer().getPosition(),
+        getLocalPlayer().blockPosition(),
         distance.get(),
         (pos, cachedColor) -> {
-          if (getWorld().isBlockLoaded(pos)) {
-            int currentColor = getTileEntityColor(getWorld().getTileEntity(pos));
+          if (getWorld().hasChunkAt(pos)) {
+            int currentColor = getTileEntityColor(getWorld().getBlockEntity(pos));
             if (currentColor == -1) {
               stale.add(pos);
             } else if (currentColor != cachedColor) {
@@ -148,7 +176,7 @@ public class StorageESPMod extends ToggleMod {
     }
 
     dynamicStorage.clear();
-    for (Entity entity : getWorld().loadedEntityList) {
+    for (Entity entity : getWorld().entitiesForRendering()) {
       if (getEntityColor(entity) != -1) {
         dynamicStorage.add(entity);
       }
@@ -156,7 +184,7 @@ public class StorageESPMod extends ToggleMod {
   }
 
   @SubscribeEvent
-  public void onWorldUnload(WorldEvent.Unload event) {
+  public void onWorldUnload(LevelEvent.Unload event) {
     cache.close();
     cachePath = null;
     dynamicStorage.clear();
@@ -164,9 +192,8 @@ public class StorageESPMod extends ToggleMod {
 
   @SubscribeEvent
   public void onRender(RenderEvent event) {
-    event.getBuffer().begin(GL11.GL_LINES, DefaultVertexFormats.POSITION_COLOR);
     cache.forEachNearby(
-        getLocalPlayer().getPosition(),
+        getLocalPlayer().blockPosition(),
         distance.get(),
         (pos, color) ->
             GeometryTessellator.drawCuboid(
@@ -176,13 +203,13 @@ public class StorageESPMod extends ToggleMod {
     double distanceSquared = (double) distance.get() * distance.get();
     for (Entity entity : dynamicStorage) {
       int color = getEntityColor(entity);
-      if (!entity.isDead
+      if (entity.isAlive()
           && color != -1
-          && entity.getDistanceSq(getLocalPlayer()) <= distanceSquared) {
-        BlockPos pos = entity.getPosition();
+          && entity.distanceToSqr(getLocalPlayer()) <= distanceSquared) {
+        BlockPos pos = entity.blockPosition();
         GeometryTessellator.drawCuboid(
             event.getBuffer(),
-            entity instanceof EntityItemFrame ? pos.add(0, -1, 0) : pos,
+            entity instanceof ItemFrame ? pos.below() : pos,
             GeometryMasks.Line.ALL,
             color
         );

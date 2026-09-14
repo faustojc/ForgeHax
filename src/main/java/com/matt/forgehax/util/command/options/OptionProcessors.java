@@ -3,7 +3,7 @@ package com.matt.forgehax.util.command.options;
 import com.matt.forgehax.util.SafeConverter;
 import com.matt.forgehax.util.color.Color;
 import com.matt.forgehax.util.command.ExecuteData;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.util.Mth;
 
 /**
  * Created on 6/6/2017 by fr1kin
@@ -18,10 +18,10 @@ public class OptionProcessors {
     data.set(
         "colorBuffer",
         Color.of(
-            MathHelper.clamp(r, 0, 255),
-            MathHelper.clamp(g, 0, 255),
-            MathHelper.clamp(b, 0, 255),
-            MathHelper.clamp(a, 0, 255)
+            Mth.clamp(r, 0, 255),
+            Mth.clamp(g, 0, 255),
+            Mth.clamp(b, 0, 255),
+            Mth.clamp(a, 0, 255)
         ).toBuffer()
     );
     data.set(

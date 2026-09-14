@@ -1,19 +1,19 @@
 package com.matt.forgehax.asm.events;
 
-import net.minecraft.block.Block;
-import net.minecraft.block.state.IBlockState;
-import net.minecraft.util.BlockRenderLayer;
-import net.minecraftforge.fml.common.eventhandler.Event;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraftforge.eventbus.api.Event;
 
 public class RenderBlockInLayerEvent extends Event {
 
   private final Block block;
-  private final IBlockState state;
-  private final BlockRenderLayer compareToLayer;
-  private BlockRenderLayer layer;
+  private final BlockState state;
+  private final RenderType compareToLayer;
+  private RenderType layer;
 
   public RenderBlockInLayerEvent(
-      Block block, IBlockState state, BlockRenderLayer layer, BlockRenderLayer compareToLayer) {
+      Block block, BlockState state, RenderType layer, RenderType compareToLayer) {
     this.block = block;
     this.state = state;
     this.layer = layer;
@@ -24,19 +24,19 @@ public class RenderBlockInLayerEvent extends Event {
     return block;
   }
 
-  public BlockRenderLayer getLayer() {
+  public RenderType getLayer() {
     return layer;
   }
 
-  public void setLayer(BlockRenderLayer layer) {
+  public void setLayer(RenderType layer) {
     this.layer = layer;
   }
 
-  public BlockRenderLayer getCompareToLayer() {
+  public RenderType getCompareToLayer() {
     return compareToLayer;
   }
 
-  public IBlockState getState() {
+  public BlockState getState() {
     return state;
   }
 }

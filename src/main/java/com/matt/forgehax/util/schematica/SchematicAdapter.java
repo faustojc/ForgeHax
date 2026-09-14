@@ -1,8 +1,8 @@
 package com.matt.forgehax.util.schematica;
 
 import com.github.lunatrius.schematica.client.world.SchematicWorld;
-import net.minecraft.block.state.IBlockState;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.block.state.BlockState;
 
 
 public final class SchematicAdapter implements Schematic {
@@ -15,7 +15,7 @@ public final class SchematicAdapter implements Schematic {
 
 
   @Override
-  public IBlockState desiredState(BlockPos pos) {
+  public BlockState desiredState(BlockPos pos) {
     return schematic.getSchematic().getBlockState(pos);
   }
 

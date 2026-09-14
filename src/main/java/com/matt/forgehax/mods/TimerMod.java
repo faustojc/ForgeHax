@@ -1,15 +1,16 @@
 package com.matt.forgehax.mods;
 
 import com.matt.forgehax.asm.events.PacketEvent;
-import com.matt.forgehax.asm.reflection.FastReflection;
+import com.matt.forgehax.mixin.accessor.MinecraftAccessor;
+import com.matt.forgehax.mixin.accessor.TimerAccessor;
 import com.matt.forgehax.mods.services.TickRateService;
 import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.network.play.server.SPacketTimeUpdate;
-import net.minecraft.util.Timer;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraft.client.Timer;
+import net.minecraft.network.protocol.game.ClientboundSetTimePacket;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 /**
  * Created by Babbaj on 1/24/2018.
@@ -63,7 +64,7 @@ public class TimerMod extends ToggleMod {
 
   @SubscribeEvent
   public void onPacketPreceived(PacketEvent.Incoming.Pre event) {
-    if (event.getPacket() instanceof SPacketTimeUpdate && tpsSync.getAsBoolean()) {
+    if (event.getPacket() instanceof ClientboundSetTimePacket && tpsSync.getAsBoolean()) {
       TickRateService.TickRateData data = TickRateService.getTickData();
       if (data.getSampleSize() > 0) {
         TickRateService.TickRateData.CalculationData point = data.getPoint();
@@ -75,8 +76,8 @@ public class TimerMod extends ToggleMod {
   }
 
   private void setSpeed(float value) {
-    Timer timer = FastReflection.Fields.Minecraft_timer.get(MC);
-    FastReflection.Fields.Timer_tickLength.set(timer, value);
+    Timer timer = ((MinecraftAccessor) MC).getTimer();
+    ((TimerAccessor) timer).setMsPerTick(1000.0F / value);
   }
 
   @Override

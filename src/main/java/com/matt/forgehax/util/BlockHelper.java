@@ -1,51 +1,51 @@
 package com.matt.forgehax.util;
 
 import com.google.common.collect.Lists;
-import com.matt.forgehax.asm.utils.ReflectionHelper;
+import com.matt.forgehax.mixin.accessor.BlockItemInvoker;
 import com.matt.forgehax.util.entity.LocalPlayerInventory.InvItem;
 import com.matt.forgehax.util.entity.LocalPlayerUtils;
 import com.matt.forgehax.util.math.VectorUtils;
 import it.unimi.dsi.fastutil.objects.Object2BooleanArrayMap;
-import net.minecraft.block.Block;
-import net.minecraft.block.state.IBlockState;
-import net.minecraft.init.Blocks;
-import net.minecraft.item.ItemBlock;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.EnumFacing;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.RayTraceResult;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.*;
 import java.util.stream.Stream;
 
 import static com.matt.forgehax.Helper.getLocalPlayer;
 import static com.matt.forgehax.Helper.getWorld;
-import static com.matt.forgehax.asm.reflection.FastReflection.Methods.Block_onBlockActivated;
 import static com.matt.forgehax.util.entity.LocalPlayerUtils.isInReach;
 
 public class BlockHelper {
 
-  public static UniqueBlock newUniqueBlock(Block block, int metadata, BlockPos pos) {
-    return new UniqueBlock(block, metadata, pos);
-  }
-
-  public static UniqueBlock newUniqueBlock(Block block, int metadata) {
-    return newUniqueBlock(block, metadata, BlockPos.ORIGIN);
+  public static UniqueBlock newUniqueBlock(BlockState state, BlockPos pos) {
+    return new UniqueBlock(state, pos);
   }
 
   public static UniqueBlock newUniqueBlock(BlockPos pos) {
-    IBlockState state = getWorld().getBlockState(pos);
-    Block block = state.getBlock();
-    return newUniqueBlock(block, block.getMetaFromState(state), pos);
+    return newUniqueBlock(getWorld().getBlockState(pos), pos);
   }
 
-  public static BlockTraceInfo newBlockTrace(BlockPos pos, EnumFacing side) {
+  public static BlockTraceInfo newBlockTrace(BlockPos pos, Direction side) {
     return new BlockTraceInfo(pos, side);
   }
 
-  public static List<BlockPos> getBlocksInRadius(Vec3d pos, double radius) {
+  public static List<BlockPos> getBlocksInRadius(Vec3 pos, double radius) {
     List<BlockPos> list = Lists.newArrayList();
     for (double x = pos.x - radius; x <= pos.x + radius; ++x) {
       for (double y = pos.y - radius; y <= pos.y + radius; ++y) {
@@ -58,25 +58,29 @@ public class BlockHelper {
   }
 
   public static float getBlockHardness(BlockPos pos) {
-    IBlockState state = getWorld().getBlockState(pos);
-    return state.getBlockHardness(getWorld(), pos);
+    return getWorld().getBlockState(pos).getDestroySpeed(getWorld(), pos);
   }
 
   public static boolean isBlockReplaceable(BlockPos pos) {
-    return getWorld().getBlockState(pos).getMaterial().isReplaceable();
+    return getWorld().getBlockState(pos).canBeReplaced();
   }
 
-  public static boolean isTraceClear(Vec3d start, Vec3d end, EnumFacing targetSide) {
-    RayTraceResult tr = getWorld().rayTraceBlocks(start, end, false, true, false);
-    return tr == null
-        || (new BlockPos(end).equals(new BlockPos(tr.hitVec))
-        && targetSide.getOpposite().equals(tr.sideHit));
+  public static boolean isTraceClear(Vec3 start, Vec3 end, Direction targetSide) {
+    BlockHitResult tr = getWorld().clip(new ClipContext(
+        start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, getLocalPlayer()));
+    return tr.getType() == HitResult.Type.MISS
+        || (BlockPos.containing(end).equals(tr.getBlockPos())
+        && targetSide.getOpposite().equals(tr.getDirection()));
   }
 
-  public static Vec3d getOBBCenter(BlockPos pos) {
-    IBlockState state = getWorld().getBlockState(pos);
-    AxisAlignedBB bb = state.getBoundingBox(getWorld(), pos);
-    return new Vec3d(
+  public static Vec3 getOBBCenter(BlockPos pos) {
+    BlockState state = getWorld().getBlockState(pos);
+    VoxelShape shape = state.getShape(getWorld(), pos);
+    if (shape.isEmpty()) {
+      return Vec3.ZERO;
+    }
+    AABB bb = shape.bounds();
+    return new Vec3(
         bb.minX + ((bb.maxX - bb.minX) / 2.D),
         bb.minY + ((bb.maxY - bb.minY) / 2.D),
         bb.minZ + ((bb.maxZ - bb.minZ) / 2.D)
@@ -84,14 +88,15 @@ public class BlockHelper {
   }
 
   public static boolean isBlockPlaceable(BlockPos pos) {
-    IBlockState state = getWorld().getBlockState(pos);
-    return state.getBlock().canCollideCheck(state, false);
+    // equivalent of the old Block#canCollideCheck(state, false), which reduced to
+    // "does this state's material block movement"
+    return getWorld().getBlockState(pos).blocksMotion();
   }
 
   private static BlockTraceInfo getPlaceableBlockSideTrace(
-      Vec3d eyes, Vec3d normal, Stream<EnumFacing> stream, BlockPos pos) {
+      Vec3 eyes, Vec3 normal, Stream<Direction> stream, BlockPos pos) {
     return stream
-        .map(side -> newBlockTrace(pos.offset(side), side))
+        .map(side -> newBlockTrace(pos.relative(side), side))
         .filter(info -> isBlockPlaceable(info.getPos()))
         .filter(info -> isInReach(eyes, info.getHitVec()))
         .filter(info -> BlockHelper.isTraceClear(eyes, info.getHitVec(), info.getSide()))
@@ -103,23 +108,23 @@ public class BlockHelper {
   }
 
   public static BlockTraceInfo getPlaceableBlockSideTrace(
-      Vec3d eyes, Vec3d normal, EnumSet<EnumFacing> sides, BlockPos pos) {
+      Vec3 eyes, Vec3 normal, EnumSet<Direction> sides, BlockPos pos) {
     return getPlaceableBlockSideTrace(eyes, normal, sides.stream(), pos);
   }
 
-  public static BlockTraceInfo getPlaceableBlockSideTrace(Vec3d eyes, Vec3d normal, BlockPos pos) {
-    return getPlaceableBlockSideTrace(eyes, normal, Stream.of(EnumFacing.values()), pos);
+  public static BlockTraceInfo getPlaceableBlockSideTrace(Vec3 eyes, Vec3 normal, BlockPos pos) {
+    return getPlaceableBlockSideTrace(eyes, normal, Stream.of(Direction.values()), pos);
   }
 
-  public static BlockTraceInfo getBlockSideTrace(Vec3d eyes, BlockPos pos, EnumFacing side) {
+  public static BlockTraceInfo getBlockSideTrace(Vec3 eyes, BlockPos pos, Direction side) {
     return Optional.of(newBlockTrace(pos, side))
                    .filter(tr -> BlockHelper.isTraceClear(eyes, tr.getHitVec(), tr.getSide()))
                    .filter(tr -> LocalPlayerUtils.isInReach(eyes, tr.getHitVec()))
                    .orElse(null);
   }
 
-  public static BlockTraceInfo getVisibleBlockSideTrace(Vec3d eyes, Vec3d normal, BlockPos pos) {
-    return Arrays.stream(EnumFacing.values())
+  public static BlockTraceInfo getVisibleBlockSideTrace(Vec3 eyes, Vec3 normal, BlockPos pos) {
+    return Arrays.stream(Direction.values())
                  .map(side -> BlockHelper.getBlockSideTrace(eyes, pos, side.getOpposite()))
                  .filter(Objects::nonNull)
                  .min(
@@ -131,52 +136,58 @@ public class BlockHelper {
   public static class BlockTraceInfo {
 
     private final BlockPos pos;
-    private final EnumFacing side;
-    private final Vec3d center;
-    private final Vec3d hitVec;
+    private final Direction side;
+    private final Vec3 center;
+    private final Vec3 hitVec;
 
-    private BlockTraceInfo(BlockPos pos, EnumFacing side) {
+    private BlockTraceInfo(BlockPos pos, Direction side) {
       this.pos = pos;
       this.side = side;
-      Vec3d obb = BlockHelper.getOBBCenter(pos);
-      this.center = new Vec3d(pos).add(obb);
+      Vec3 obb = BlockHelper.getOBBCenter(pos);
+      this.center = new Vec3(pos.getX(), pos.getY(), pos.getZ()).add(obb);
+      Direction opposite = getOppositeSide();
       this.hitVec =
           this.center.add(
-              VectorUtils.multiplyBy(new Vec3d(getOppositeSide().getDirectionVec()), obb));
+              VectorUtils.multiplyBy(
+                  new Vec3(opposite.getStepX(), opposite.getStepY(), opposite.getStepZ()), obb));
     }
 
     public BlockPos getPos() {
       return pos;
     }
 
-    public EnumFacing getSide() {
+    public Direction getSide() {
       return side;
     }
 
-    public EnumFacing getOppositeSide() {
+    public Direction getOppositeSide() {
       return side.getOpposite();
     }
 
-    public Vec3d getHitVec() {
+    public Vec3 getHitVec() {
       return this.hitVec;
     }
 
-    public Vec3d getCenteredPos() {
+    public Vec3 getCenteredPos() {
       return center;
     }
 
-    public IBlockState getBlockState() {
+    public BlockState getBlockState() {
       return getWorld().getBlockState(getPos());
     }
 
     public boolean isPlaceable(InvItem item) {
-      if (!(item.getItem() instanceof ItemBlock)) {
+      if (!(item.getItem() instanceof BlockItem)) {
         return true;
       }
 
-      ItemBlock itemBlock = (ItemBlock) item.getItem();
-      return itemBlock.canPlaceBlockOnSide(
-          getWorld(), getPos(), getOppositeSide(), getLocalPlayer(), item.getItemStack());
+      BlockPlaceContext context =
+          new BlockPlaceContext(
+              getLocalPlayer(),
+              InteractionHand.MAIN_HAND,
+              item.getItemStack(),
+              new BlockHitResult(getHitVec(), getOppositeSide(), getPos(), false));
+      return ((BlockItemInvoker) item.getItem()).invokeGetPlacementState(context) != null;
     }
 
     public boolean isSneakRequired() {
@@ -186,34 +197,37 @@ public class BlockHelper {
 
   public static class UniqueBlock {
 
-    private final Block block;
-    private final int metadata;
+    private final BlockState state;
     private final BlockPos pos;
 
-    private UniqueBlock(Block block, int metadata, BlockPos pos) {
-      this.block = block;
-      this.metadata = metadata;
+    private UniqueBlock(BlockState state, BlockPos pos) {
+      this.state = state;
       this.pos = pos;
     }
 
     public Block getBlock() {
-      return block;
+      return state.getBlock();
     }
 
+    public BlockState getState() {
+      return state;
+    }
+
+    /** Global block-state id (see {@link com.matt.forgehax.util.blocks.BlockOptionHelper}). */
     public int getMetadata() {
-      return metadata;
+      return Block.getId(state);
     }
 
     public BlockPos getPos() {
       return pos;
     }
 
-    public Vec3d getCenteredPos() {
-      return new Vec3d(getPos()).add(getOBBCenter(getPos()));
+    public Vec3 getCenteredPos() {
+      return new Vec3(getPos().getX(), getPos().getY(), getPos().getZ()).add(getOBBCenter(getPos()));
     }
 
     public ItemStack asItemStack() {
-      return new ItemStack(getBlock(), 1, getMetadata());
+      return new ItemStack(getBlock());
     }
 
     public boolean isInvalid() {
@@ -221,22 +235,18 @@ public class BlockHelper {
     }
 
     public boolean isEqual(BlockPos pos) {
-      IBlockState state = getWorld().getBlockState(pos);
-      Block bl = state.getBlock();
-      return Objects.equals(getBlock(), bl) && getMetadata() == bl.getMetaFromState(state);
+      return Objects.equals(getState(), getWorld().getBlockState(pos));
     }
 
     @Override
     public boolean equals(Object obj) {
       return this == obj
-          || (obj instanceof UniqueBlock
-          && getBlock().equals(((UniqueBlock) obj).getBlock())
-          && getMetadata() == ((UniqueBlock) obj).getMetadata());
+          || (obj instanceof UniqueBlock && getState().equals(((UniqueBlock) obj).getState()));
     }
 
     @Override
     public String toString() {
-      return getBlock().getRegistryName().toString() + "{" + getMetadata() + "}";
+      return BuiltInRegistries.BLOCK.getKey(getBlock()).toString() + "{" + getMetadata() + "}";
     }
   }
 
@@ -248,9 +258,22 @@ public class BlockHelper {
       Objects.requireNonNull(instance);
       return CACHE.computeIfAbsent(
           instance.getClass(),
-          clazz ->
-              Block.class
-                  != ReflectionHelper.getMethodDeclaringClass(Block_onBlockActivated, instance)
+          (Class<?> clazz) -> {
+            try {
+              Class<?> declaring = clazz.getMethod(
+                  "use",
+                  BlockState.class,
+                  net.minecraft.world.level.Level.class,
+                  BlockPos.class,
+                  net.minecraft.world.entity.player.Player.class,
+                  net.minecraft.world.InteractionHand.class,
+                  BlockHitResult.class
+              ).getDeclaringClass();
+              return declaring != BlockBehaviour.class;
+            } catch (NoSuchMethodException e) {
+              return false;
+            }
+          }
       );
     }
   }

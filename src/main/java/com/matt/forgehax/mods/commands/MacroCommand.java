@@ -18,13 +18,14 @@ import com.matt.forgehax.util.command.exception.CommandExecuteException;
 import com.matt.forgehax.util.mod.CommandMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
 import com.matt.forgehax.util.serialization.ISerializableJson;
+import com.matt.forgehax.util.key.BindingHelper;
+import com.mojang.blaze3d.platform.InputConstants;
 import joptsimple.OptionParser;
-import net.minecraft.client.settings.KeyBinding;
-import net.minecraftforge.fml.client.registry.ClientRegistry;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import net.minecraftforge.fml.common.gameevent.InputEvent;
+import net.minecraft.client.KeyMapping;
+import net.minecraftforge.client.event.InputEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 import org.apache.commons.lang3.ArrayUtils;
-import org.lwjgl.input.Keyboard;
+import org.lwjgl.glfw.GLFW;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
@@ -55,20 +56,29 @@ public class MacroCommand extends CommandMod {
     return Streams.stream(jsonArray).map(JsonElement::getAsString).iterator();
   }
 
+  // resolves a friendly key name (eg. "f", "space") to its GLFW key code
+  private static int getKeyCode(String name) {
+    try {
+      return GLFW.class.getField("GLFW_KEY_" + name.toUpperCase()).getInt(null);
+    } catch (ReflectiveOperationException e) {
+      return InputConstants.UNKNOWN.getValue();
+    }
+  }
+
   @SubscribeEvent
-  public void onKeyboardEvent(InputEvent.KeyInputEvent event) {
+  public void onKeyboardEvent(InputEvent.Key event) {
     MACROS
         .stream()
         .filter(macro -> !macro.isAnonymous())
-        .filter(macro -> macro.getBind().isPressed())
+        .filter(macro -> macro.getBind().consumeClick())
         .forEach(this::executeMacro);
 
     // execute anonymous macros
-    if (Keyboard.getEventKeyState()) { // on press
+    if (event.getAction() != GLFW.GLFW_RELEASE) { // on press
       MACROS
           .stream()
           .filter(MacroEntry::isAnonymous)
-          .filter(macro -> macro.getKey() == Keyboard.getEventKey())
+          .filter(macro -> macro.getKey() == event.getKey())
           .forEach(this::executeMacro);
     }
   }
@@ -77,17 +87,16 @@ public class MacroCommand extends CommandMod {
     MACROS.remove(macro);
 
     if (macro.name.isPresent()) {
-      MC.gameSettings.keyBindings =
+      MC.options.keyMappings =
           ArrayUtils.remove(
-              MC.gameSettings.keyBindings,
-              ArrayUtils.indexOf(MC.gameSettings.keyBindings, macro.getBind())
+              MC.options.keyMappings,
+              ArrayUtils.indexOf(MC.options.keyMappings, macro.getBind())
           );
+      KeyMapping.resetMapping();
     }
-    // remove the category if there are no named macros to prevent crash
-    // TODO: fix crash when a category is empty
-    if (MACROS.stream().noneMatch(entry -> !entry.isAnonymous())) {
-      KeyBinding.getKeybinds().remove("Macros");
-    }
+    // TODO(1.20.1): KeyMapping.getKeybinds() is gone; empty "Macros" category cleanup
+    // for the controls screen is dropped for now (categories are keyed off
+    // KeyMapping.CATEGORY_SORT_ORDER which we never touch here).
   }
 
   @Override
@@ -110,14 +119,14 @@ public class MacroCommand extends CommandMod {
 
           if (data.hasOption("key")) {
             // remove by key
-            final int key = Keyboard.getKeyIndex(data.getOptionAsString("key").toUpperCase());
+            final int key = getKeyCode(data.getOptionAsString("key"));
             MACROS
                 .stream()
                 .filter(macro -> macro.getKey() == key)
                 .peek(
                     __ ->
                         Helper.printMessage(
-                            "Removing bind for key \"%s\"", Keyboard.getKeyName(key)))
+                            "Removing bind for key \"%s\"", BindingHelper.getIndexName(key)))
                 .forEach(this::removeMacro);
           }
           if (data.hasOption("name")) {
@@ -142,8 +151,8 @@ public class MacroCommand extends CommandMod {
           Helper.printMessage("Macros (%d):", MACROS.size());
           for (MacroEntry macro : MACROS) {
             data.write(
-                macro.name.map(name -> '\"' + name + '\"').orElse("anonymous") + ": " + Keyboard
-                    .getKeyName(macro.key));
+                macro.name.map(name -> '\"' + name + '\"').orElse("anonymous") + ": "
+                    + BindingHelper.getIndexName(macro.key));
             if (data.hasOption("full")) {
               data.incrementIndent();
               data.write(this.rawMacroString(macro));
@@ -213,8 +222,8 @@ public class MacroCommand extends CommandMod {
         .processor(
             data -> {
               data.requiredArguments(2);
-              final int key = Keyboard.getKeyIndex(data.getArgumentAsString(0).toUpperCase());
-              if (data.getOption("name") == null && key == Keyboard.KEY_NONE) {
+              final int key = getKeyCode(data.getArgumentAsString(0));
+              if (data.getOption("name") == null && key == InputConstants.UNKNOWN.getValue()) {
                 throw new CommandExecuteException("A macro must have a name and/or a valid key");
               }
 
@@ -242,7 +251,7 @@ public class MacroCommand extends CommandMod {
                 macro.registerBind();
               }
 
-              Helper.printMessage("Successfully bound to %s", Keyboard.getKeyName(key));
+              Helper.printMessage("Successfully bound to %s", BindingHelper.getIndexName(key));
             })
         .build();
   }
@@ -256,9 +265,9 @@ public class MacroCommand extends CommandMod {
 
     private final List<ImmutableList<String>> commands = new ArrayList<>();
     private final Optional<String> name;
-    private int key = Keyboard.KEY_NONE;
+    private int key = InputConstants.UNKNOWN.getValue();
     @Nullable // null if this is an anonymous macro (ie !name.isPresent())
-    private transient KeyBinding bind;
+    private transient KeyMapping bind;
 
     public MacroEntry(String name) {
       this.name = name.isEmpty() ? Optional.empty() : Optional.of(name);
@@ -271,7 +280,7 @@ public class MacroCommand extends CommandMod {
     }
 
     public int getKey() {
-      return Optional.ofNullable(bind).map(KeyBinding::getKeyCode).orElse(this.key);
+      return Optional.ofNullable(bind).map(km -> km.getKey().getValue()).orElse(this.key);
     }
 
     public Optional<String> getName() {
@@ -286,14 +295,19 @@ public class MacroCommand extends CommandMod {
       return commands;
     }
 
-    public KeyBinding getBind() {
+    public KeyMapping getBind() {
       return this.bind;
     }
 
     // only done for named macros
     private void registerBind() {
-      KeyBinding bind = new KeyBinding(name.get(), this.getKey(), "Macros");
-      ClientRegistry.registerKeyBinding(bind); // TODO: listen for key pressed for anonymous macros
+      KeyMapping bind = new KeyMapping(name.get(), this.getKey(), "Macros");
+      // TODO: listen for key pressed for anonymous macros
+      // No more ClientRegistry.registerKeyBinding for dynamic runtime binds (that API now
+      // expects static registration via RegisterKeyMappingsEvent); append directly instead,
+      // same as CommandStub/removeMacro already do for the options key list.
+      MC.options.keyMappings = ArrayUtils.add(MC.options.keyMappings, bind);
+      KeyMapping.resetMapping();
       this.bind = bind;
     }
 

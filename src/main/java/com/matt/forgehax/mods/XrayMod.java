@@ -7,12 +7,8 @@ import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.client.renderer.GlStateManager;
-import net.minecraft.client.renderer.texture.TextureMap;
-import net.minecraft.entity.Entity;
-import net.minecraft.util.BlockRenderLayer;
-import net.minecraftforge.common.ForgeModContainer;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import static com.matt.forgehax.Helper.reloadChunks;
 
@@ -35,17 +31,14 @@ public class XrayMod extends ToggleMod {
               })
           .build();
 
-  private boolean previousForgeLightPipelineEnabled = false;
-  private boolean isInternalCall = false;
-
   public XrayMod() {
     super(Category.WORLD, "Xray", false, "See blocks through walls");
   }
 
   @Override
   public void onEnabled() {
-    previousForgeLightPipelineEnabled = ForgeModContainer.forgeLightPipelineEnabled;
-    ForgeModContainer.forgeLightPipelineEnabled = false;
+    // TODO(1.20.1): ForgeModContainer.forgeLightPipelineEnabled had no 1.20.1 equivalent
+    // (the "fancy" forge lighting pipeline toggle was a 1.12 feature); dropped.
     ForgeHaxHooks.COLOR_MULTIPLIER_ALPHA = (this.opacity.getAsFloat() / 255.f);
     ForgeHaxHooks.SHOULD_UPDATE_ALPHA = true;
     reloadChunks();
@@ -54,37 +47,17 @@ public class XrayMod extends ToggleMod {
 
   @Override
   public void onDisabled() {
-    ForgeModContainer.forgeLightPipelineEnabled = previousForgeLightPipelineEnabled;
     ForgeHaxHooks.SHOULD_UPDATE_ALPHA = false;
     reloadChunks();
     ForgeHaxHooks.SHOULD_DISABLE_CAVE_CULLING.disable("Xray");
   }
 
+  // TODO(1.20.1): the old TextureMap blur/mipmap dance around the layer re-render still needs
+  // porting to TextureAtlas/AbstractTexture; the hook itself now fires (MixinLevelRenderer).
   @SubscribeEvent
   public void onPreRenderBlockLayer(RenderBlockLayerEvent.Pre event) {
-    if (!isInternalCall) {
-      if (!event.getRenderLayer().equals(BlockRenderLayer.TRANSLUCENT)) {
-        event.setCanceled(true);
-      } else if (event.getRenderLayer().equals(BlockRenderLayer.TRANSLUCENT)) {
-        isInternalCall = true;
-        Entity renderEntity = MC.getRenderViewEntity();
-        GlStateManager.disableAlpha();
-        MC.renderGlobal.renderBlockLayer(
-            BlockRenderLayer.SOLID, event.getPartialTicks(), 0, renderEntity);
-        GlStateManager.enableAlpha();
-        MC.renderGlobal.renderBlockLayer(
-            BlockRenderLayer.CUTOUT_MIPPED, event.getPartialTicks(), 0, renderEntity);
-        MC.getTextureManager()
-          .getTexture(TextureMap.LOCATION_BLOCKS_TEXTURE)
-          .setBlurMipmap(false, false);
-        MC.renderGlobal.renderBlockLayer(
-            BlockRenderLayer.CUTOUT, event.getPartialTicks(), 0, renderEntity);
-        MC.getTextureManager()
-          .getTexture(TextureMap.LOCATION_BLOCKS_TEXTURE)
-          .restoreLastBlurMipmap();
-        GlStateManager.disableAlpha();
-        isInternalCall = false;
-      }
+    if (!event.getRenderLayer().equals(RenderType.translucent())) {
+      event.setCanceled(true);
     }
   }
 
@@ -92,9 +65,11 @@ public class XrayMod extends ToggleMod {
   public void onPostRenderBlockLayer(RenderBlockLayerEvent.Post event) {
   }
 
+  // 1.20.1 resolves one chunk layer per state, so layer and compare-to layer are the same value
+  // (see MixinItemBlockRenderTypes); the per-layer canRenderInLayer query is gone.
   @SubscribeEvent
   public void onRenderBlockInLayer(RenderBlockInLayerEvent event) {
-    if (event.getCompareToLayer().equals(BlockRenderLayer.TRANSLUCENT)) {
+    if (event.getCompareToLayer().equals(RenderType.translucent())) {
       event.setLayer(event.getCompareToLayer());
     }
   }

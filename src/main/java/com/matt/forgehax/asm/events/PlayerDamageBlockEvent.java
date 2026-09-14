@@ -1,24 +1,24 @@
 package com.matt.forgehax.asm.events;
 
-import net.minecraft.client.multiplayer.PlayerControllerMP;
-import net.minecraft.util.EnumFacing;
-import net.minecraft.util.math.BlockPos;
-import net.minecraftforge.fml.common.eventhandler.Event;
+import net.minecraft.client.multiplayer.MultiPlayerGameMode;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraftforge.eventbus.api.Event;
 
 public class PlayerDamageBlockEvent extends Event {
 
-  private final PlayerControllerMP playerController;
+  private final MultiPlayerGameMode playerController;
   private final BlockPos pos;
-  private final EnumFacing side;
+  private final Direction side;
 
   public PlayerDamageBlockEvent(
-      PlayerControllerMP playerController, BlockPos pos, EnumFacing side) {
+      MultiPlayerGameMode playerController, BlockPos pos, Direction side) {
     this.playerController = playerController;
     this.pos = pos;
     this.side = side;
   }
 
-  public PlayerControllerMP getPlayerController() {
+  public MultiPlayerGameMode getPlayerController() {
     return playerController;
   }
 
@@ -26,7 +26,7 @@ public class PlayerDamageBlockEvent extends Event {
     return pos;
   }
 
-  public EnumFacing getSide() {
+  public Direction getSide() {
     return side;
   }
 }

@@ -1,8 +1,8 @@
 package com.matt.forgehax.asm.events;
 
-import net.minecraft.entity.item.EntityBoat;
-import net.minecraftforge.fml.common.eventhandler.Cancelable;
-import net.minecraftforge.fml.common.eventhandler.Event;
+import net.minecraft.world.entity.vehicle.Boat;
+import net.minecraftforge.eventbus.api.Cancelable;
+import net.minecraftforge.eventbus.api.Event;
 
 /**
  * Created by Babbaj on 9/2/2017.
@@ -10,10 +10,10 @@ import net.minecraftforge.fml.common.eventhandler.Event;
 @Cancelable
 public class RenderBoatEvent extends Event {
 
-  private final EntityBoat boat;
+  private final Boat boat;
   private float yaw;
 
-  public RenderBoatEvent(EntityBoat boatIn, float entityYaw) {
+  public RenderBoatEvent(Boat boatIn, float entityYaw) {
     this.boat = boatIn;
     this.yaw = entityYaw;
   }
@@ -26,7 +26,7 @@ public class RenderBoatEvent extends Event {
     this.yaw = yawIn;
   }
 
-  public EntityBoat getBoat() {
+  public Boat getBoat() {
     return this.boat;
   }
 }

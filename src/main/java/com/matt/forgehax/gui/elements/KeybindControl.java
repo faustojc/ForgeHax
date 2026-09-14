@@ -2,7 +2,8 @@ package com.matt.forgehax.gui.elements;
 
 import com.matt.forgehax.util.command.CommandStub;
 import com.matt.forgehax.util.key.BindingHelper;
-import org.lwjgl.input.Keyboard;
+import com.mojang.blaze3d.platform.InputConstants;
+import org.lwjgl.glfw.GLFW;
 
 /** Adapter for editing a CommandStub keybind without introducing a second bind store. */
 public final class KeybindControl {
@@ -22,7 +23,7 @@ public final class KeybindControl {
   }
 
   public int getKeyCode() {
-    return isAvailable() ? command.getBind().getKeyCode() : Keyboard.KEY_NONE;
+    return isAvailable() ? command.getBind().getKey().getValue() : InputConstants.UNKNOWN.getValue();
   }
 
   public String getDisplayName() {
@@ -30,7 +31,7 @@ public final class KeybindControl {
       return "UNAVAILABLE";
     }
     int keyCode = getKeyCode();
-    if (keyCode == Keyboard.KEY_NONE) {
+    if (keyCode == InputConstants.UNKNOWN.getValue()) {
       return "UNBOUND";
     }
     String name = BindingHelper.getIndexName(keyCode);
@@ -42,9 +43,9 @@ public final class KeybindControl {
     if (!isAvailable()) {
       return false;
     }
-    int before = command.getBind().getKeyCode();
+    int before = getKeyCode();
     command.bind(keyCode);
-    int after = command.getBind().getKeyCode();
+    int after = getKeyCode();
     if (before != after) {
       command.serialize();
       return true;
@@ -53,7 +54,7 @@ public final class KeybindControl {
   }
 
   public boolean unbind() {
-    return setKeyCode(Keyboard.KEY_NONE);
+    return setKeyCode(InputConstants.UNKNOWN.getValue());
   }
 
   /**
@@ -64,10 +65,10 @@ public final class KeybindControl {
     if (!isAvailable()) {
       return CaptureResult.UNAVAILABLE;
     }
-    if (keyCode == Keyboard.KEY_ESCAPE) {
+    if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
       return CaptureResult.CANCELED;
     }
-    if (keyCode == Keyboard.KEY_DELETE || keyCode == Keyboard.KEY_BACK) {
+    if (keyCode == GLFW.GLFW_KEY_DELETE || keyCode == GLFW.GLFW_KEY_BACKSPACE) {
       unbind();
       return CaptureResult.UNBOUND;
     }
@@ -83,7 +84,7 @@ public final class KeybindControl {
     if (button < 0) {
       return CaptureResult.CANCELED;
     }
-    setKeyCode(-100 - button);
+    setKeyCode(-100 + button);
     return CaptureResult.BOUND;
   }
 

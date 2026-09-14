@@ -4,6 +4,7 @@ import com.matt.forgehax.events.LocalPlayerUpdateEvent;
 import com.matt.forgehax.events.Render2DEvent;
 import com.matt.forgehax.util.color.Colors;
 import com.matt.forgehax.util.command.Setting;
+import com.matt.forgehax.util.draw.SurfaceBuilder;
 import com.matt.forgehax.util.draw.SurfaceHelper;
 import com.matt.forgehax.util.entity.EntityUtils;
 import com.matt.forgehax.util.math.Plane;
@@ -11,11 +12,10 @@ import com.matt.forgehax.util.math.VectorUtils;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.client.renderer.GlStateManager;
-import net.minecraft.entity.item.EntityItem;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.math.Vec3d;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -33,7 +33,7 @@ public class ItemESP extends ToggleMod {
           .defaultTo(1.D)
           .min(0.D)
           .build();
-  private final List<EntityItem> renderItems = new ArrayList<>();
+  private final List<ItemEntity> renderItems = new ArrayList<>();
 
   public ItemESP() {
     super(Category.RENDER, "ItemESP", false, "ESP for items");
@@ -42,9 +42,9 @@ public class ItemESP extends ToggleMod {
   @SubscribeEvent
   public void onUpdate(LocalPlayerUpdateEvent event) {
     renderItems.clear();
-    for (net.minecraft.entity.Entity entity : getWorld().loadedEntityList) {
-      if (entity instanceof EntityItem && entity.ticksExisted > 1) {
-        renderItems.add((EntityItem) entity);
+    for (net.minecraft.world.entity.Entity entity : getWorld().entitiesForRendering()) {
+      if (entity instanceof ItemEntity && entity.tickCount > 1) {
+        renderItems.add((ItemEntity) entity);
       }
     }
   }
@@ -56,22 +56,15 @@ public class ItemESP extends ToggleMod {
 
   @SubscribeEvent
   public void onRender2D(final Render2DEvent event) {
-    GlStateManager.enableBlend();
-    GlStateManager.tryBlendFuncSeparate(
-        GlStateManager.SourceFactor.SRC_ALPHA,
-        GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA,
-        GlStateManager.SourceFactor.ONE,
-        GlStateManager.DestFactor.ZERO
-    );
-    GlStateManager.enableTexture2D();
-    GlStateManager.disableDepth();
+    SurfaceBuilder.enableBlend();
+    SurfaceBuilder.enableFontRendering(); // also disables depth test
 
     final double scale = this.scale.get() == 0 ? 1.D : this.scale.get();
 
-    for (EntityItem entity : renderItems) {
-      Vec3d bottomPos = EntityUtils.getInterpolatedPos(entity, event.getPartialTicks());
-      Vec3d topPos =
-          bottomPos.addVector(0.D, entity.getRenderBoundingBox().maxY - entity.posY, 0.D);
+    for (ItemEntity entity : renderItems) {
+      Vec3 bottomPos = EntityUtils.getInterpolatedPos(entity, event.getPartialTicks());
+      Vec3 topPos =
+          bottomPos.add(0.D, entity.getBoundingBox().maxY - entity.getY(), 0.D);
 
       Plane top = VectorUtils.toScreen(topPos);
       Plane bot = VectorUtils.toScreen(bottomPos);
@@ -80,28 +73,17 @@ public class ItemESP extends ToggleMod {
         continue;
       }
 
-      double offX = bot.getX() - top.getX();
-      double offY = bot.getY() - top.getY();
-
-      GlStateManager.pushMatrix();
-      GlStateManager.translate(top.getX() - (offX / 2.D), bot.getY(), 0);
-
       ItemStack stack = entity.getItem();
-      String text =
-          stack.getDisplayName() + (stack.isStackable() ? (" x" + stack.getCount()) : "");
+      String text = stack.getHoverName().getString()
+          + (stack.isStackable() ? (" x" + stack.getCount()) : "");
 
-      SurfaceHelper.drawTextShadow(
-          text,
-          (int) (offX / 2.D - SurfaceHelper.getTextWidth(text, scale) / 2.D),
-          -(int) (offY - SurfaceHelper.getTextHeight(scale) / 2.D) - 1,
-          Colors.WHITE.toBuffer(),
-          scale
-      );
+      double x = top.getX() - (SurfaceHelper.getTextWidth(text, scale) / 2.D);
+      double y = top.getY() + (SurfaceHelper.getTextHeight(scale) / 2.D) - 1;
 
-      GlStateManager.popMatrix();
+      SurfaceHelper.drawTextShadow(text, (int) x, (int) y, Colors.WHITE.toBuffer(), scale);
     }
 
-    GlStateManager.enableDepth();
-    GlStateManager.disableBlend();
+    SurfaceBuilder.disableFontRendering();
+    SurfaceBuilder.disableBlend();
   }
 }

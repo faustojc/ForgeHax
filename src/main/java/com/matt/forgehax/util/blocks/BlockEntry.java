@@ -9,8 +9,9 @@ import com.matt.forgehax.util.blocks.properties.IBlockProperty;
 import com.matt.forgehax.util.blocks.properties.PropertyFactory;
 import com.matt.forgehax.util.serialization.ISerializableJson;
 import joptsimple.internal.Strings;
-import net.minecraft.block.Block;
-import net.minecraft.block.state.IBlockState;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 
 import javax.annotation.Nonnull;
 import java.io.IOException;
@@ -18,6 +19,9 @@ import java.util.*;
 
 /**
  * Created on 5/19/2017 by fr1kin
+ *
+ * <p>{@code meta} is a 1.20.1 global block-state id (see {@link BlockOptionHelper}) rather than
+ * the old 0-15 metadata value; {@code -1} still means "any state of this block".
  */
 public class BlockEntry implements ISerializableJson, Globals {
 
@@ -53,11 +57,16 @@ public class BlockEntry implements ISerializableJson, Globals {
   }
 
   public BlockEntry(String name, int meta) throws BlockDoesNotExistException {
-    this(Block.getBlockFromName(name), meta, !BlockOptionHelper.isAir(name));
+    this(
+        net.minecraft.resources.ResourceLocation.tryParse(name) != null
+            ? BuiltInRegistries.BLOCK.getOptional(net.minecraft.resources.ResourceLocation.tryParse(name)).orElse(null)
+            : null,
+        meta, !BlockOptionHelper.isAir(name)
+    );
   }
 
   public BlockEntry(int id, int meta) throws BlockDoesNotExistException {
-    this(Block.getBlockById(id), meta, !BlockOptionHelper.isAir(id));
+    this(BuiltInRegistries.BLOCK.byId(id), meta, !BlockOptionHelper.isAir(id));
   }
 
   protected void registerProperty(IBlockProperty property) {
@@ -77,18 +86,19 @@ public class BlockEntry implements ISerializableJson, Globals {
   }
 
   public String getResourceName() {
-    return block != null
-        ? (block.getRegistryName() != null ? block.getRegistryName().toString() : block.toString())
-        : Strings.EMPTY;
+    if (block == null) {
+      return Strings.EMPTY;
+    }
+    net.minecraft.resources.ResourceLocation key = BuiltInRegistries.BLOCK.getKey(block);
+    return key != null ? key.toString() : block.toString();
   }
 
   public String getPrettyName() {
-    return block != null
-        ? ((block.getRegistryName() != null
-            ? block.getRegistryName().getResourcePath()
-            : block.toString())
-           + (isMetadata() ? ":" + meta : Strings.EMPTY))
-        : Strings.EMPTY;
+    if (block == null) {
+      return Strings.EMPTY;
+    }
+    net.minecraft.resources.ResourceLocation key = BuiltInRegistries.BLOCK.getKey(block);
+    return (key != null ? key.getPath() : block.toString()) + (isMetadata() ? ":" + meta : Strings.EMPTY);
   }
 
   public Block getBlock() {
@@ -223,11 +233,9 @@ public class BlockEntry implements ISerializableJson, Globals {
   public boolean equals(Object obj) {
     if (obj instanceof BlockEntry) {
       return getUniqueName().compareTo(((BlockEntry) obj).getUniqueName()) == 0;
-    } else if (obj instanceof IBlockState) {
-      return isEqual(
-          ((IBlockState) obj).getBlock(),
-          ((IBlockState) obj).getBlock().getMetaFromState((IBlockState) obj)
-      );
+    } else if (obj instanceof BlockState) {
+      BlockState state = (BlockState) obj;
+      return isEqual(state.getBlock(), Block.getId(state));
     } else {
       return hashCode() == obj.hashCode();
     }

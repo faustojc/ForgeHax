@@ -1,7 +1,6 @@
 package com.matt.forgehax.asm.utils.environment;
 
 import com.matt.forgehax.asm.utils.remapping.NonObfuscatedStateMapper;
-import com.matt.forgehax.asm.utils.remapping.ObfuscatedStateMapper;
 
 /**
  * Created on 5/26/2017 by fr1kin
@@ -64,11 +63,7 @@ public class RuntimeState {
   }
 
   public static IStateMapper getMapper() {
-    return remapper == null
-        ? remapper =
-          (isObfuscated()
-           ? ObfuscatedStateMapper.getInstance()
-           : NonObfuscatedStateMapper.getInstance())
-        : remapper;
+    // 1.20.1 uses official mappings, so there is no runtime SRG/notch remapping left.
+    return remapper == null ? remapper = NonObfuscatedStateMapper.getInstance() : remapper;
   }
 }

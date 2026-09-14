@@ -1,8 +1,8 @@
 package com.matt.forgehax.asm.events;
 
-import net.minecraft.client.renderer.BufferBuilder;
-import net.minecraft.client.renderer.chunk.RenderChunk;
-import net.minecraftforge.fml.common.eventhandler.Event;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import net.minecraft.client.renderer.chunk.ChunkRenderDispatcher.RenderChunk;
+import net.minecraftforge.eventbus.api.Event;
 
 /**
  * Created on 5/7/2017 by fr1kin
@@ -10,9 +10,9 @@ import net.minecraftforge.fml.common.eventhandler.Event;
 public class ChunkUploadedEvent extends Event {
 
   private final RenderChunk renderChunk;
-  private final BufferBuilder buffer;
+  private final BufferBuilder.RenderedBuffer buffer;
 
-  public ChunkUploadedEvent(RenderChunk renderChunk, BufferBuilder BufferBuilder) {
+  public ChunkUploadedEvent(RenderChunk renderChunk, BufferBuilder.RenderedBuffer BufferBuilder) {
     this.renderChunk = renderChunk;
     this.buffer = BufferBuilder;
   }
@@ -21,7 +21,7 @@ public class ChunkUploadedEvent extends Event {
     return renderChunk;
   }
 
-  public BufferBuilder getBuffer() {
+  public BufferBuilder.RenderedBuffer getBuffer() {
     return buffer;
   }
 }

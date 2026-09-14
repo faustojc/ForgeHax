@@ -2,8 +2,9 @@ package com.matt.forgehax.util.entity;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import net.minecraft.enchantment.Enchantment;
-import net.minecraft.nbt.NBTTagList;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.world.item.enchantment.Enchantment;
 
 import java.util.Collections;
 import java.util.Comparator;
@@ -12,20 +13,20 @@ import java.util.Map;
 
 public class EnchantmentUtils {
 
-  public static List<EntityEnchantment> getEnchantments(NBTTagList tags) {
+  public static List<EntityEnchantment> getEnchantments(ListTag tags) {
     if (tags == null) {
       return null;
     }
     List<EntityEnchantment> list = Lists.newArrayList();
-    for (int i = 0; i < tags.tagCount(); i++) {
+    for (int i = 0; i < tags.size(); i++) {
       list.add(
           new EntityEnchantment(
-              tags.getCompoundTagAt(i).getShort("id"), tags.getCompoundTagAt(i).getShort("lvl")));
+              tags.getCompound(i).getShort("id"), tags.getCompound(i).getShort("lvl")));
     }
     return list;
   }
 
-  public static List<EntityEnchantment> getEnchantmentsSorted(NBTTagList tags) {
+  public static List<EntityEnchantment> getEnchantmentsSorted(ListTag tags) {
     List<EntityEnchantment> list = getEnchantments(tags);
     if (list != null) {
       Collections.sort(list, new EnchantSort());
@@ -89,7 +90,7 @@ public class EnchantmentUtils {
     private final int level;
 
     public EntityEnchantment(int id, int level) {
-      this(Enchantment.getEnchantmentByID(id), level);
+      this(Enchantment.byId(id), level);
     }
 
     public EntityEnchantment(Enchantment enchantment, int level) {
@@ -106,7 +107,7 @@ public class EnchantmentUtils {
     }
 
     public String getShortName() {
-      int id = Enchantment.getEnchantmentID(enchantment);
+      int id = BuiltInRegistries.ENCHANTMENT.getId(enchantment);
       if (SHORT_ENCHANT_NAMES.containsKey(id)) {
         if (enchantment.getMaxLevel() <= 1) {
           return SHORT_ENCHANT_NAMES.get(id);
@@ -119,7 +120,7 @@ public class EnchantmentUtils {
     }
 
     public String toString() {
-      return enchantment.getTranslatedName(level);
+      return enchantment.getFullname(level).getString();
     }
   }
 }

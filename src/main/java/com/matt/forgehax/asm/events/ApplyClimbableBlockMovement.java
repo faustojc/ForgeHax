@@ -1,13 +1,13 @@
 package com.matt.forgehax.asm.events;
 
-import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraftforge.event.entity.living.LivingEvent;
-import net.minecraftforge.fml.common.eventhandler.Cancelable;
+import net.minecraftforge.eventbus.api.Cancelable;
 
 @Cancelable
 public class ApplyClimbableBlockMovement extends LivingEvent {
 
-  public ApplyClimbableBlockMovement(EntityLivingBase entity) {
+  public ApplyClimbableBlockMovement(LivingEntity entity) {
     super(entity);
   }
 }

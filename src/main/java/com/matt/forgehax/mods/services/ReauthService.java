@@ -1,15 +1,15 @@
 package com.matt.forgehax.mods.services;
 
-import com.matt.forgehax.asm.reflection.FastReflection;
+import com.matt.forgehax.mixin.accessor.DisconnectedScreenAccessor;
 import com.matt.forgehax.mods.managers.AccountManager;
 import com.matt.forgehax.util.SimpleTimer;
 import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.client.gui.GuiDisconnected;
-import net.minecraftforge.client.event.GuiOpenEvent;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraft.client.gui.screens.DisconnectedScreen;
+import net.minecraftforge.client.event.ScreenEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import static com.matt.forgehax.Helper.getLog;
 
@@ -53,9 +53,9 @@ public class ReauthService extends ToggleMod {
   }
 
   @SubscribeEvent
-  public void guiOpen(final GuiOpenEvent event) {
-    if (event.getGui() instanceof GuiDisconnected) {
-      final String disconnectMsg = getDisconnectedMsg((GuiDisconnected) event.getGui());
+  public void guiOpen(final ScreenEvent.Opening event) {
+    if (event.getNewScreen() instanceof DisconnectedScreen) {
+      final String disconnectMsg = getDisconnectedMsg((DisconnectedScreen) event.getNewScreen());
 
       if (disconnectMsg.contains("Failed to login")) {
 
@@ -67,7 +67,7 @@ public class ReauthService extends ToggleMod {
           return;
         }
 
-        final String alias = FastReflection.Fields.Minecraft_session.get(MC).getUsername();
+        final String alias = MC.getUser().getName();
 
         if (AccountManager.INSTANCE.login(alias)) {
           isSessionValid = true;
@@ -85,15 +85,7 @@ public class ReauthService extends ToggleMod {
     }
   }
 
-  private String getDisconnectedMsg(GuiDisconnected disconnected) {
-    String message;
-
-    try {
-      message = FastReflection.Fields.GuiDisconnected_message.get(disconnected).getUnformattedText();
-    } catch (Exception e) {
-      message = e.getMessage(); // do this cause lazy
-    }
-
-    return message;
+  private String getDisconnectedMsg(DisconnectedScreen disconnected) {
+    return ((DisconnectedScreenAccessor) disconnected).getReason().getString();
   }
 }

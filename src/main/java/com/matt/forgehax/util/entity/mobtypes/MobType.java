@@ -1,7 +1,7 @@
 package com.matt.forgehax.util.entity.mobtypes;
 
 import com.matt.forgehax.util.common.PriorityEnum;
-import net.minecraft.entity.Entity;
+import net.minecraft.world.entity.Entity;
 
 /**
  * Created on 6/27/2017 by fr1kin

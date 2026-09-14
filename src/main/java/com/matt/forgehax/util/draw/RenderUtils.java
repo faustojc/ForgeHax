@@ -1,151 +1,132 @@
 package com.matt.forgehax.util.draw;
 
 import com.matt.forgehax.Globals;
-import com.matt.forgehax.util.entity.EntityUtils;
-import net.minecraft.client.renderer.BufferBuilder;
-import net.minecraft.client.renderer.GlStateManager;
-import net.minecraft.client.renderer.Tessellator;
-import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.Tesselator;
+import com.mojang.blaze3d.vertex.VertexFormat;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.Vec3;
 import org.lwjgl.opengl.GL11;
 
-import static com.matt.forgehax.Helper.getLocalPlayer;
+/** World-space line and box helpers for the modern vertex pipeline. */
+public final class RenderUtils implements Globals {
 
-public class RenderUtils implements Globals {
+  private RenderUtils() {
+  }
 
-  public static Vec3d getRenderPos() {
-    return new Vec3d(
-        MC.player.lastTickPosX
-            + (MC.player.posX - MC.player.lastTickPosX) * MC.getRenderPartialTicks(),
-        MC.player.lastTickPosY
-            + (MC.player.posY - MC.player.lastTickPosY) * MC.getRenderPartialTicks(),
-        MC.player.lastTickPosZ
-            + (MC.player.posZ - MC.player.lastTickPosZ) * MC.getRenderPartialTicks()
+  public static Vec3 getRenderPos() {
+    Entity entity = MC.getCameraEntity();
+    if (entity == null) {
+      return Vec3.ZERO;
+    }
+    double partialTicks = MC.getFrameTime();
+    return new Vec3(
+        entity.xo + (entity.getX() - entity.xo) * partialTicks,
+        entity.yo + (entity.getY() - entity.yo) * partialTicks,
+        entity.zo + (entity.getZ() - entity.zo) * partialTicks
     );
   }
 
   public static void drawLine(
-      Vec3d startPos, Vec3d endPos, int color, boolean smooth, float width) {
-    Tessellator tessellator = Tessellator.getInstance();
-    BufferBuilder BufferBuilder = tessellator.getBuffer();
-
-    Vec3d endVecPos = endPos.subtract(startPos);
-
-    float r = (float) (color >> 16 & 255) / 255.0F;
-    float g = (float) (color >> 8 & 255) / 255.0F;
-    float b = (float) (color & 255) / 255.0F;
-    float a = (float) (color >> 24 & 255) / 255.0F;
+      Vec3 startPos, Vec3 endPos, int color, boolean smooth, float width) {
+    Vec3 renderPos = getRenderPos();
+    Vec3 start = startPos.subtract(renderPos);
+    Vec3 end = endPos.subtract(renderPos);
 
     if (smooth) {
       GL11.glEnable(GL11.GL_LINE_SMOOTH);
     }
+    RenderSystem.lineWidth(width);
+    RenderSystem.enableBlend();
+    RenderSystem.defaultBlendFunc();
+    RenderSystem.disableDepthTest();
 
-    GL11.glLineWidth(width);
+    BufferBuilder builder = Tesselator.getInstance().getBuilder();
+    builder.begin(VertexFormat.Mode.DEBUG_LINES, DefaultVertexFormat.POSITION_COLOR);
+    vertex(builder, start.x, start.y, start.z, color);
+    vertex(builder, end.x, end.y, end.z, color);
+    draw(builder);
 
-    GlStateManager.pushMatrix();
-    GlStateManager.translate(startPos.x, startPos.y, startPos.z);
-    GlStateManager.disableTexture2D();
-    GlStateManager.enableBlend();
-    GlStateManager.disableAlpha();
-    GlStateManager.tryBlendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, 1, 0);
-    GlStateManager.shadeModel(GL11.GL_SMOOTH);
-
-    BufferBuilder.begin(GL11.GL_LINES, DefaultVertexFormats.POSITION_COLOR);
-    BufferBuilder.pos(0, 0, 0).color(r, g, b, a).endVertex();
-    BufferBuilder.pos(endVecPos.x, endVecPos.y, endVecPos.z).color(r, g, b, a).endVertex();
-    tessellator.draw();
-
+    RenderSystem.enableDepthTest();
+    RenderSystem.disableBlend();
     if (smooth) {
       GL11.glDisable(GL11.GL_LINE_SMOOTH);
     }
-
-    GlStateManager.shadeModel(GL11.GL_FLAT);
-    GlStateManager.disableBlend();
-    GlStateManager.enableAlpha();
-    GlStateManager.enableTexture2D();
-    GlStateManager.enableDepth();
-    GlStateManager.enableCull();
-    GlStateManager.popMatrix();
   }
 
-  // thanks again Gregor
   public static void drawBox(
-      Vec3d startPos, Vec3d endPos, int color, float width, boolean ignoreZ) {
-    Tessellator tessellator = Tessellator.getInstance();
-    BufferBuilder buffer = tessellator.getBuffer();
+      Vec3 startPos, Vec3 endPos, int color, float width, boolean ignoreZ) {
+    Vec3 renderPos = getRenderPos();
+    Vec3 min = startPos.subtract(renderPos);
+    Vec3 max = endPos.subtract(renderPos);
 
-    Vec3d renderPos = EntityUtils.getInterpolatedPos(getLocalPlayer(), MC.getRenderPartialTicks());
-
-    Vec3d min = startPos.subtract(renderPos);
-    Vec3d max = endPos.subtract(renderPos);
-
-    double minX = min.x, minY = min.y, minZ = min.z;
-    double maxX = max.x, maxY = max.y, maxZ = max.z;
-
-    float r = (float) (color >> 16 & 255) / 255.0F;
-    float g = (float) (color >> 8 & 255) / 255.0F;
-    float b = (float) (color & 255) / 255.0F;
-    float a = (float) (color >> 24 & 255) / 255.0F;
-
-    GlStateManager.pushMatrix();
-    GlStateManager.disableTexture2D();
-    GlStateManager.enableBlend();
-    GlStateManager.disableAlpha();
-    GlStateManager.tryBlendFuncSeparate(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA, 1, 0);
-    GlStateManager.shadeModel(GL11.GL_SMOOTH);
-    GlStateManager.glLineWidth(width);
-
+    RenderSystem.lineWidth(width);
+    RenderSystem.enableBlend();
+    RenderSystem.defaultBlendFunc();
     if (ignoreZ) {
-      GlStateManager.disableDepth();
+      RenderSystem.disableDepthTest();
     }
 
-    GlStateManager.color(r, g, b, a);
+    BufferBuilder builder = Tesselator.getInstance().getBuilder();
+    builder.begin(VertexFormat.Mode.DEBUG_LINES, DefaultVertexFormat.POSITION_COLOR);
 
-    // GlStateManager.translate(startPos.xCoord, startPos.yCoord, startPos.zCoord);
+    line(builder, min.x, min.y, min.z, max.x, min.y, min.z, color);
+    line(builder, max.x, min.y, min.z, max.x, min.y, max.z, color);
+    line(builder, max.x, min.y, max.z, min.x, min.y, max.z, color);
+    line(builder, min.x, min.y, max.z, min.x, min.y, min.z, color);
 
-    buffer.begin(GL11.GL_LINE_STRIP, DefaultVertexFormats.POSITION);
-    buffer.pos(minX, minY, minZ).endVertex();
-    buffer.pos(maxX, minY, minZ).endVertex();
-    buffer.pos(maxX, minY, maxZ).endVertex();
-    buffer.pos(minX, minY, maxZ).endVertex();
-    buffer.pos(minX, minY, minZ).endVertex();
-    tessellator.draw();
-    buffer.begin(GL11.GL_LINE_STRIP, DefaultVertexFormats.POSITION);
-    buffer.pos(minX, maxY, minZ).endVertex();
-    buffer.pos(maxX, maxY, minZ).endVertex();
-    buffer.pos(maxX, maxY, maxZ).endVertex();
-    buffer.pos(minX, maxY, maxZ).endVertex();
-    buffer.pos(minX, maxY, minZ).endVertex();
-    tessellator.draw();
-    buffer.begin(GL11.GL_LINES, DefaultVertexFormats.POSITION);
-    buffer.pos(minX, minY, minZ).endVertex();
-    buffer.pos(minX, maxY, minZ).endVertex();
-    buffer.pos(maxX, minY, minZ).endVertex();
-    buffer.pos(maxX, maxY, minZ).endVertex();
-    buffer.pos(maxX, minY, maxZ).endVertex();
-    buffer.pos(maxX, maxY, maxZ).endVertex();
-    buffer.pos(minX, minY, maxZ).endVertex();
-    buffer.pos(minX, maxY, maxZ).endVertex();
-    tessellator.draw();
+    line(builder, min.x, max.y, min.z, max.x, max.y, min.z, color);
+    line(builder, max.x, max.y, min.z, max.x, max.y, max.z, color);
+    line(builder, max.x, max.y, max.z, min.x, max.y, max.z, color);
+    line(builder, min.x, max.y, max.z, min.x, max.y, min.z, color);
 
-    GlStateManager.shadeModel(GL11.GL_FLAT);
-    GlStateManager.disableBlend();
-    GlStateManager.enableAlpha();
-    GlStateManager.enableTexture2D();
-    GlStateManager.enableDepth();
-    GlStateManager.enableCull();
-    GlStateManager.popMatrix();
+    line(builder, min.x, min.y, min.z, min.x, max.y, min.z, color);
+    line(builder, max.x, min.y, min.z, max.x, max.y, min.z, color);
+    line(builder, max.x, min.y, max.z, max.x, max.y, max.z, color);
+    line(builder, min.x, min.y, max.z, min.x, max.y, max.z, color);
+
+    draw(builder);
+    RenderSystem.enableDepthTest();
+    RenderSystem.disableBlend();
+    RenderSystem.enableCull();
   }
 
   public static void drawBox(
       BlockPos startPos, BlockPos endPos, int color, float width, boolean ignoreZ) {
     drawBox(
-        new Vec3d(startPos.getX(), startPos.getY(), startPos.getZ()),
-        new Vec3d(endPos.getX(), endPos.getY(), endPos.getZ()),
+        new Vec3(startPos.getX(), startPos.getY(), startPos.getZ()),
+        new Vec3(endPos.getX(), endPos.getY(), endPos.getZ()),
         color,
         width,
         ignoreZ
     );
+  }
+
+  private static void line(
+      BufferBuilder builder,
+      double x0,
+      double y0,
+      double z0,
+      double x1,
+      double y1,
+      double z1,
+      int color) {
+    vertex(builder, x0, y0, z0, color);
+    vertex(builder, x1, y1, z1, color);
+  }
+
+  private static void vertex(BufferBuilder builder, double x, double y, double z, int color) {
+    builder.vertex(x, y, z)
+        .color(color >> 16 & 255, color >> 8 & 255, color & 255, color >>> 24 & 255)
+        .endVertex();
+  }
+
+  private static void draw(BufferBuilder builder) {
+    RenderSystem.setShader(net.minecraft.client.renderer.GameRenderer::getPositionColorShader);
+    BufferUploader.drawWithShader(builder.end());
   }
 }

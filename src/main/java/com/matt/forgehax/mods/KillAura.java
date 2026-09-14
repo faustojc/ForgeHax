@@ -14,15 +14,16 @@ import com.matt.forgehax.util.math.AngleHelper;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.client.entity.EntityPlayerSP;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityLivingBase;
-import net.minecraft.util.EnumHand;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.World;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 
 import javax.annotation.Nullable;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 import static com.matt.forgehax.Helper.*;
 
@@ -160,22 +161,26 @@ public class KillAura extends ToggleMod implements PositionRotationManager.Movem
 
   @Override
   public void onLocalPlayerMovementUpdate(RotationState.Local state) {
-    final EntityPlayerSP player = getLocalPlayer();
-    final World world = getWorld();
+    final LocalPlayer player = getLocalPlayer();
+    final Level world = getWorld();
 
-    if (player == null || world == null || player.isSpectator() || !player.isEntityAlive()) {
+    if (player == null || world == null || player.isSpectator() || !player.isAlive()) {
       target = null;
       return;
     }
 
-    final Vec3d eyes = EntityUtils.getEyePos(player);
-    final Vec3d look = player.getLookVec().normalize();
+    final Vec3 eyes = EntityUtils.getEyePos(player);
+    final Vec3 look = player.getLookAngle().normalize();
     final Angle angles = AngleHelper.getAngleFacingInDegrees(look);
 
     final Entity previousTarget = target;
     boolean previousTargetValid = false;
     validTargets.clear();
-    for (Entity entity : world.loadedEntityList) {
+    final double searchRange = range.get();
+    final net.minecraft.world.phys.AABB search = searchRange > 0.D
+        ? player.getBoundingBox().inflate(searchRange + 2.D)
+        : new net.minecraft.world.phys.AABB(-3.0E7D, -3.0E7D, -3.0E7D, 3.0E7D, 3.0E7D, 3.0E7D);
+    for (Entity entity : world.getEntities((Entity) null, search, entity -> true)) {
       if (isValidTarget(eyes, angles, entity)) {
         validTargets.add(entity);
         if (entity == previousTarget) {
@@ -196,7 +201,7 @@ public class KillAura extends ToggleMod implements PositionRotationManager.Movem
 
     final Entity found = current;
 
-    if (rotate.get()) {
+    if (Boolean.TRUE.equals(rotate.get())) {
       state.setViewAngles(Utils.getLookAtAngles(found).normalize(), silent.get());
     }
 
@@ -205,9 +210,9 @@ public class KillAura extends ToggleMod implements PositionRotationManager.Movem
     }
 
     final List<Entity> victims =
-        multi.get()
+        Boolean.TRUE.equals(multi.get())
             ? ImmutableList.copyOf(validTargets)
-            : ImmutableList.of(found);
+            : List.of(found);
 
     state.invokeLater(
         rs -> {
@@ -217,8 +222,8 @@ public class KillAura extends ToggleMod implements PositionRotationManager.Movem
 
           boolean attacked = false;
           for (Entity victim : victims) {
-            if (world.getEntityByID(victim.getEntityId()) == victim && Targets.isAttackable(victim)) {
-              getPlayerController().attackEntity(player, victim);
+            if (world.getEntity(victim.getId()) == victim && Targets.isAttackable(victim)) {
+              getPlayerController().attack(player, victim);
               attacked = true;
             }
           }
@@ -227,13 +232,13 @@ public class KillAura extends ToggleMod implements PositionRotationManager.Movem
             attackTimer.start();
           }
           if (attacked && swing.get()) {
-            player.swingArm(EnumHand.MAIN_HAND);
+            player.swing(InteractionHand.MAIN_HAND);
           }
         });
   }
 
   private Entity findTarget(
-      final List<Entity> candidates, final Vec3d eyes, final Angle angles) {
+      final List<Entity> candidates, final Vec3 eyes, final Angle angles) {
     Entity best = null;
     double bestScore = Double.MAX_VALUE;
     for (Entity entity : candidates) {
@@ -246,26 +251,24 @@ public class KillAura extends ToggleMod implements PositionRotationManager.Movem
     return best;
   }
 
-  private double sorting(final Vec3d eyes, final Angle angles, final Entity entity) {
-    switch (mode.get()) {
-      case HEALTH:
-        return EntityUtils.isLiving(entity)
-            ? ((EntityLivingBase) entity).getHealth()
-            : Float.MAX_VALUE;
-      case CROSSHAIR:
+  private double sorting(final Vec3 eyes, final Angle angles, final Entity entity) {
+    return switch (mode.get()) {
+      case HEALTH -> EntityUtils.isLiving(entity)
+          ? ((LivingEntity) entity).getHealth()
+          : Float.MAX_VALUE;
+      case CROSSHAIR -> {
         Angle diff = angles.sub(Utils.getLookAtAngles(entity).normalize()).normalize();
-        return Math.abs(diff.getPitch()) + Math.abs(diff.getYaw());
-      case CLOSEST:
-      default:
-        return getAttackPosition(entity).subtract(eyes).lengthSquared();
-    }
+        yield Math.abs(diff.getPitch()) + Math.abs(diff.getYaw());
+      }
+      default -> getAttackPosition(entity).subtract(eyes).lengthSqr();
+    };
   }
 
   /**
    * Cheap checks first, the shared filters and the ray trace are the expensive ones and only run on
    * entities that are already in range
    */
-  private boolean isValidTarget(final Vec3d eyes, final Angle angles, final Entity entity) {
+  private boolean isValidTarget(final Vec3 eyes, final Angle angles, final Entity entity) {
     return Targets.isValidTarget(entity)
         && isInRange(eyes, entity)
         && isInFov(angles, entity)
@@ -277,12 +280,12 @@ public class KillAura extends ToggleMod implements PositionRotationManager.Movem
    * a center several blocks away from the part of them that is standing on top of you, so a
    * center-based check drops them from the target list entirely.
    */
-  private boolean isInRange(Vec3d eyes, Entity entity) {
+  private boolean isInRange(Vec3 eyes, Entity entity) {
     double dist = range.get();
     if (dist <= 0.D) {
       return true;
     }
-    return EntityUtils.getDistanceSq(eyes, entity.getEntityBoundingBox()) <= dist * dist;
+    return EntityUtils.getDistanceSq(eyes, entity.getBoundingBox()) <= dist * dist;
   }
 
   private boolean isInFov(Angle angles, Entity entity) {
@@ -295,28 +298,30 @@ public class KillAura extends ToggleMod implements PositionRotationManager.Movem
   }
 
   private boolean isVisible(Entity entity) {
-    return !visCheck.get() || getLocalPlayer().canEntityBeSeen(entity);
+    return !visCheck.get() || getLocalPlayer().hasLineOfSight(entity);
   }
 
-  private Vec3d getAttackPosition(Entity entity) {
+  private Vec3 getAttackPosition(Entity entity) {
     return EntityUtils.getInterpolatedPos(entity, 1)
-                      .addVector(0, entity.getEyeHeight() / 2, 0);
+                      .add(0, entity.getEyeHeight() / 2, 0);
   }
 
   private double getLagComp() {
     TickRateService.TickRateData tickData = TickRateService.getTickData();
-    return lagCompensation.get() && tickData.getSampleSize() > 0
+    return Boolean.TRUE.equals(lagCompensation.get()) && tickData.getSampleSize() > 0
         ? -(20.D - tickData.getPoint().getAverage())
         : 0.D;
   }
 
-  private boolean canAttack(EntityPlayerSP player) {
+  private boolean canAttack(LocalPlayer player) {
     if (!attackTimer.hasTimeElapsed(attackDelay.get())) {
       return false;
     }
     final float cdRatio = cooldownPercent.get() / 100F;
-    final float cdOffset = cdRatio <= 1F ? 0F : -(player.getCooldownPeriod() * (cdRatio - 1F));
-    return player.getCooledAttackStrength((float) getLagComp() + cdOffset) >= Math.min(1F, cdRatio);
+    final float cdOffset = cdRatio <= 1F ? 0F
+        : -(player.getCurrentItemAttackStrengthDelay() * (cdRatio - 1F));
+    return player.getAttackStrengthScale((float) getLagComp() + cdOffset)
+        >= Math.min(1F, cdRatio);
   }
 
   enum TargetModes {

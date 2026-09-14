@@ -8,9 +8,9 @@ import com.matt.forgehax.util.math.AlignHelper.Align;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.HudMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.client.entity.EntityPlayerSP;
-import net.minecraftforge.client.event.RenderGameOverlayEvent;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraftforge.client.event.RenderGuiEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -63,12 +63,12 @@ public class CoordsHud extends HudMod {
   public void onLocalPlayerUpdate(LocalPlayerUpdateEvent ev) {
     if (getWorld() == null) return;
 
-    EntityPlayerSP player = getLocalPlayer();
-    thisX = player.posX;
-    thisY = player.posY;
-    thisZ = player.posZ;
+    LocalPlayer player = getLocalPlayer();
+    thisX = player.getX();
+    thisY = player.getY();
+    thisZ = player.getZ();
 
-    double thisFactor = getWorld().provider.getMovementFactor();
+    double thisFactor = getWorld().dimensionType().coordinateScale();
     double otherFactor = thisFactor != 1d ? 1d : 8d;
     double travelFactor = thisFactor / otherFactor;
     otherX = thisX * travelFactor;
@@ -76,7 +76,7 @@ public class CoordsHud extends HudMod {
   }
 
   @SubscribeEvent
-  public void onRenderOverlay(RenderGameOverlayEvent.Text event) {
+  public void onRenderOverlay(RenderGuiEvent.Post event) {
     List<String> text = new ArrayList<>();
 
     if (!translate.get() || (translate.get() && multiline.get())) {
@@ -91,9 +91,14 @@ public class CoordsHud extends HudMod {
       }
     }
 
-    SurfaceHelper.drawTextAlign(
-        text, getPosX(0), getPosY(0),
-        Colors.WHITE.toBuffer(), scale.get(), true, alignment.get().ordinal()
-    );
+    SurfaceHelper.setGraphics(event.getGuiGraphics());
+    try {
+      SurfaceHelper.drawTextAlign(
+          text, getPosX(0), getPosY(0),
+          Colors.WHITE.toBuffer(), scale.get(), true, alignment.get().ordinal()
+      );
+    } finally {
+      SurfaceHelper.setGraphics(null);
+    }
   }
 }

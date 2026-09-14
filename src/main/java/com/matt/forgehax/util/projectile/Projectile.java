@@ -4,14 +4,19 @@ import com.google.common.collect.Lists;
 import com.matt.forgehax.util.entity.EntityUtils;
 import com.matt.forgehax.util.math.Angle;
 import com.matt.forgehax.util.math.AngleHelper;
-import net.minecraft.block.material.Material;
-import net.minecraft.entity.Entity;
-import net.minecraft.init.Items;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.util.math.AxisAlignedBB;
-import net.minecraft.util.math.RayTraceResult;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.core.BlockPos;
+import net.minecraft.tags.FluidTags;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 
 import javax.annotation.Nullable;
 import java.util.List;
@@ -157,55 +162,36 @@ public enum Projectile implements IProjectile {
    */
   private static final int SOLVER_BISECTIONS = 24;
 
-  private static RayTraceResult rayTraceCheckEntityCollisions(
-      Vec3d start, Vec3d end, AxisAlignedBB bb, double motionX, double motionY, double motionZ) {
-    RayTraceResult trace = getWorld().rayTraceBlocks(start, end, false, true, false);
+  private static HitResult rayTraceCheckEntityCollisions(
+      Vec3 start, Vec3 end, AABB bb, double motionX, double motionY, double motionZ) {
+    HitResult trace =
+        getWorld().clip(
+            new ClipContext(
+                start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, getLocalPlayer()));
 
-    if (trace != null) {
-      end = trace.hitVec;
+    if (trace.getType() != HitResult.Type.MISS) {
+      end = trace.getLocation();
     }
 
-    // now check entity collisions
-    List<Entity> entities =
-        getWorld()
-            .getEntitiesWithinAABBExcludingEntity(
-                getLocalPlayer(), bb.expand(motionX, motionY, motionZ).grow(1.D));
-
-    double best = 0.D;
-    Vec3d hitPos = Vec3d.ZERO;
-    Entity hitEntity = null;
-
-    for (Entity entity : entities) {
-      if (entity.canBeCollidedWith()) {
-        float size = entity.getCollisionBorderSize();
-        AxisAlignedBB bbe = entity.getEntityBoundingBox().grow(size);
-        RayTraceResult tr = bbe.calculateIntercept(start, end);
-        if (tr != null) {
-          double distance = start.squareDistanceTo(tr.hitVec);
-          if (distance < best || hitEntity == null) {
-            best = distance;
-            hitPos = tr.hitVec;
-            hitEntity = entity;
-          }
-        }
-      }
-    }
-
-    if (hitEntity != null) {
-      trace = new RayTraceResult(hitEntity, hitPos);
-    }
-
-    return trace;
+    EntityHitResult entityTrace =
+        ProjectileUtil.getEntityHitResult(
+            getWorld(),
+            getLocalPlayer(),
+            start,
+            end,
+            bb.expandTowards(motionX, motionY, motionZ).inflate(1.D),
+            Entity::canBeCollidedWith);
+    return entityTrace == null ? (trace.getType() == HitResult.Type.MISS ? null : trace) : entityTrace;
   }
 
   /**
    * Where the projectile entity actually spawns, see EntityArrow(World, EntityLivingBase)
    */
-  public static Vec3d getEntityShootPos(Entity entity) {
+  public static Vec3 getEntityShootPos(Entity entity) {
     return EntityUtils.getEyePos(entity).subtract(0.D, SHOOT_POS_OFFSET, 0.D);
   }
 
-  private static Vec3d getShootPosFacing(Entity entity, Angle angleFacing) {
+  private static Vec3 getShootPosFacing(Entity entity, Angle angleFacing) {
     return getEntityShootPos(entity)
         .subtract(
             Math.cos(angleFacing.inRadians().getYaw() - AngleHelper.HALF_PI) * 0.16D,
@@ -237,15 +223,17 @@ public enum Projectile implements IProjectile {
   // ####################################################################################################
 
   public boolean isNull() {
-    return getItem() == null;
+    // NULL is the only constant without an item, and going through getItem() would drag the
+    // item registry into the pure-math launch solver
+    return this == NULL;
   }
 
   // ####################################################################################################
 
   @Nullable
   public SimulationResult getSimulatedTrajectory(
-      Vec3d shootPos, Angle angle, double force, int factor) throws IllegalArgumentException {
-    return getSimulatedTrajectory(shootPos, angle, force, factor, Vec3d.ZERO, MAX_ITERATIONS);
+      Vec3 shootPos, Angle angle, double force, int factor) throws IllegalArgumentException {
+    return getSimulatedTrajectory(shootPos, angle, force, factor, Vec3.ZERO, MAX_ITERATIONS);
   }
 
   /**
@@ -256,7 +244,7 @@ public enum Projectile implements IProjectile {
    */
   @Nullable
   public SimulationResult getSimulatedTrajectory(
-      Vec3d shootPos, Angle angle, double force, int factor, Vec3d inherited, int maxSteps)
+      Vec3 shootPos, Angle angle, double force, int factor, Vec3 inherited, int maxSteps)
       throws IllegalArgumentException {
     if (isNull()) {
       return null;
@@ -265,8 +253,8 @@ public enum Projectile implements IProjectile {
     Entity hitEntity = null;
 
     double[] forward = angle.getForwardVector();
-    Vec3d v =
-        new Vec3d(forward[0], forward[1], forward[2]).normalize().scale(force).add(inherited);
+    Vec3 v =
+        new Vec3(forward[0], forward[1], forward[2]).normalize().scale(force).add(inherited);
 
     double velocityX = v.x;
     double velocityY = v.y;
@@ -274,25 +262,27 @@ public enum Projectile implements IProjectile {
 
     double distanceTraveledSq = 0.D;
 
-    RayTraceResult trace;
+    HitResult trace;
 
-    List<Vec3d> points = Lists.newArrayList();
+    List<Vec3> points = Lists.newArrayList();
     points.add(shootPos); // add the initial position
 
-    Vec3d next = new Vec3d(shootPos.x, shootPos.y, shootPos.z);
-    Vec3d previous = next;
+    Vec3 next = new Vec3(shootPos.x, shootPos.y, shootPos.z);
+    Vec3 previous = next;
 
     for (int index = points.size(), n = 0; index < Math.min(maxSteps, MAX_ITERATIONS); index++) {
-      next = next.addVector(velocityX, velocityY, velocityZ);
+      next = next.add(velocityX, velocityY, velocityZ);
 
-      AxisAlignedBB bb = getBoundBox(next);
+      AABB bb = getBoundBox(next);
       trace = rayTraceCheckEntityCollisions(previous, next, bb, velocityX, velocityY, velocityZ);
 
       if (trace != null) {
-        hitEntity = trace.entityHit;
-        distanceTraveledSq += previous.squareDistanceTo(trace.hitVec);
+        if (trace instanceof EntityHitResult) {
+          hitEntity = ((EntityHitResult) trace).getEntity();
+        }
+        distanceTraveledSq += previous.distanceToSqr(trace.getLocation());
         // add final vector even if index % factor != 0
-        points.add(trace.hitVec);
+        points.add(trace.getLocation());
         break;
       }
       // only add every nth entry
@@ -303,14 +293,14 @@ public enum Projectile implements IProjectile {
         n++;
       }
 
-      distanceTraveledSq += previous.squareDistanceTo(next);
+      distanceTraveledSq += previous.distanceToSqr(next);
 
       // in the void, stop
       if (next.y <= 0) {
         break;
       }
 
-      double d = getWorld().isMaterialInBB(bb, Material.WATER) ? getWaterDrag() : getDrag();
+      double d = isWater(bb) ? getWaterDrag() : getDrag();
 
       velocityX = (velocityX * d);
       velocityY = (velocityY * d) - getGravity();
@@ -353,7 +343,7 @@ public enum Projectile implements IProjectile {
    */
   @Nullable
   public LaunchSolution solveLaunch(
-      Vec3d shootPos, Vec3d targetPos, double force, Vec3d inherited) {
+      Vec3 shootPos, Vec3 targetPos, double force, Vec3 inherited) {
     final double drag = getDrag();
     if (isNull() || force <= 0.D || drag <= 0.D || drag >= 1.D) {
       return null;
@@ -394,20 +384,20 @@ public enum Projectile implements IProjectile {
       }
     }
 
-    Vec3d aim = getLaunchVelocity(horizontal, dy, highTicks, bearingX, bearingZ).subtract(inherited);
+    Vec3 aim = getLaunchVelocity(horizontal, dy, highTicks, bearingX, bearingZ).subtract(inherited);
     return new LaunchSolution(AngleHelper.getAngleFacingInDegrees(aim).normalize(), highTicks);
   }
 
   /**
    * Launch velocity that puts the projectile on the target after the given number of ticks
    */
-  private Vec3d getLaunchVelocity(
+  private Vec3 getLaunchVelocity(
       double horizontal, double dy, double ticks, double bearingX, double bearingZ) {
     final double drag = getDrag();
     final double sum = (1.D - Math.pow(drag, ticks)) / (1.D - drag);
     final double terminal = -getGravity() / (1.D - drag);
     final double speed = horizontal / sum;
-    return new Vec3d(
+    return new Vec3(
         bearingX * speed, terminal + (dy - ticks * terminal) / sum, bearingZ * speed);
   }
 
@@ -423,10 +413,10 @@ public enum Projectile implements IProjectile {
       double bearingX,
       double bearingZ,
       double force,
-      Vec3d inherited) {
+      Vec3 inherited) {
     return getLaunchVelocity(horizontal, dy, ticks, bearingX, bearingZ)
                .subtract(inherited)
-               .lengthVector()
+               .length()
         - force;
   }
 
@@ -436,10 +426,10 @@ public enum Projectile implements IProjectile {
    * at least as long as the solved flight time was never interrupted.
    */
   public boolean isPathClear(
-      Vec3d shootPos,
+      Vec3 shootPos,
       LaunchSolution solution,
       double force,
-      Vec3d inherited,
+      Vec3 inherited,
       @Nullable Entity target) {
     final int steps = (int) Math.ceil(solution.getFlightTicks());
     SimulationResult result =
@@ -458,17 +448,17 @@ public enum Projectile implements IProjectile {
   /**
    * Whether a shot at the entity where it stands right now would land
    */
-  public boolean canHitEntity(Vec3d shooterPos, Entity targetEntity) {
+  public boolean canHitEntity(Vec3 shooterPos, Entity targetEntity) {
     if (isNull()) {
       return false;
     }
 
-    Vec3d targetPos = EntityUtils.getOBBCenter(targetEntity);
+    Vec3 targetPos = EntityUtils.getOBBCenter(targetEntity);
     double force = getMaxForce();
 
-    LaunchSolution solution = solveLaunch(shooterPos, targetPos, force, Vec3d.ZERO);
+    LaunchSolution solution = solveLaunch(shooterPos, targetPos, force, Vec3.ZERO);
     return solution != null
-        && isPathClear(shooterPos, solution, force, Vec3d.ZERO, targetEntity);
+        && isPathClear(shooterPos, solution, force, Vec3.ZERO, targetEntity);
   }
 
   /**
@@ -496,9 +486,22 @@ public enum Projectile implements IProjectile {
     }
   }
 
-  private AxisAlignedBB getBoundBox(Vec3d pos) {
+  private AABB getBoundBox(Vec3 pos) {
     double mp = getProjectileSize() / 2.D;
-    return new AxisAlignedBB(
+    return new AABB(
         pos.x - mp, pos.y - mp, pos.z - mp, pos.x + mp, pos.y + mp, pos.z + mp);
+  }
+
+  private static boolean isWater(AABB box) {
+    for (int x = Mth.floor(box.minX); x <= Mth.floor(box.maxX); x++) {
+      for (int y = Mth.floor(box.minY); y <= Mth.floor(box.maxY); y++) {
+        for (int z = Mth.floor(box.minZ); z <= Mth.floor(box.maxZ); z++) {
+          if (getWorld().getFluidState(new BlockPos(x, y, z)).is(FluidTags.WATER)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
   }
 }

@@ -6,11 +6,12 @@ import com.google.gson.stream.JsonWriter;
 import com.matt.forgehax.util.command.callbacks.CallbackData;
 import com.matt.forgehax.util.command.exception.CommandBuildException;
 import com.matt.forgehax.util.command.exception.CommandExecuteException;
+import com.matt.forgehax.util.key.BindingHelper;
+import com.matt.forgehax.util.key.LegacyKeyCodes;
 import com.matt.forgehax.util.key.IKeyBind;
 import com.matt.forgehax.util.serialization.ISerializableJson;
-import net.minecraft.client.settings.KeyBinding;
-import net.minecraftforge.fml.client.registry.ClientRegistry;
-import org.lwjgl.input.Keyboard;
+import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraft.client.KeyMapping;
 
 import javax.annotation.Nullable;
 import java.io.IOException;
@@ -24,16 +25,28 @@ public class CommandStub extends Command implements IKeyBind, ISerializableJson 
   public static final String KEYBIND = "Command.keybind";
   public static final String KEYBIND_OPTIONS = "Command.keybind_options";
 
-  private final KeyBinding bind;
+  /**
+   * Marks a command that takes no keybind at all. This cannot be InputConstants.UNKNOWN (-1),
+   * which is a real, valid state meaning "bindable but currently unbound".
+   */
+  public static final int NO_KEYBIND = Integer.MIN_VALUE;
+
+  private final KeyMapping bind;
+
+  /**
+   * Set when a bind was read from a pre-1.20.1 config, so the translated code is written straight
+   * back out. Without that the next load would translate the already-GLFW value again and lose it.
+   */
+  private boolean bindNeedsRewrite = false;
 
   protected CommandStub(Map<String, Object> data) throws CommandBuildException {
     super(data);
 
     // key binding
-    Integer keyCode = (Integer) data.getOrDefault(KEYBIND, -1);
-    if (keyCode != -1) {
-      bind = new KeyBinding(getAbsoluteName(), keyCode, "ForgeHax");
-      ClientRegistry.registerKeyBinding(bind);
+    int keyCode = (Integer) data.getOrDefault(KEYBIND, NO_KEYBIND);
+    if (keyCode != NO_KEYBIND) {
+      InputConstants.Key bound = BindingHelper.getKey(keyCode);
+      bind = new KeyMapping(getAbsoluteName(), bound.getType(), bound.getValue(), "ForgeHax");
 
       Boolean genOptions = (Boolean) data.getOrDefault(KEYBIND_OPTIONS, true);
       if (genOptions) {
@@ -43,10 +56,15 @@ public class CommandStub extends Command implements IKeyBind, ISerializableJson 
         this.processors.add(
             dt -> {
               if (dt.hasOption("bind")) {
-                String key = dt.getOptionAsString("bind").toUpperCase();
+                String key = dt.getOptionAsString("bind").toLowerCase();
 
-                int kc = Keyboard.getKeyIndex(key);
-                if (Keyboard.getKeyIndex(key) == Keyboard.KEY_NONE) {
+                int kc;
+                try {
+                  kc = InputConstants.getKey("key.keyboard." + key).getValue();
+                } catch (IllegalArgumentException e) {
+                  kc = InputConstants.UNKNOWN.getValue();
+                }
+                if (kc == InputConstants.UNKNOWN.getValue()) {
                   throw new CommandExecuteException(
                       String.format("\"%s\" is not a valid key name", key));
                 }
@@ -83,11 +101,9 @@ public class CommandStub extends Command implements IKeyBind, ISerializableJson 
     writer.beginObject();
 
     writer.name("bind");
-    if (bind != null) {
-      writer.value(bind.getKeyCode());
-    } else {
-      writer.value(-1);
-    }
+    writer.value(bind != null ? bind.getKey().getValue() : InputConstants.UNKNOWN.getValue());
+    writer.name(LegacyKeyCodes.CODES_KEY);
+    writer.value(LegacyKeyCodes.CODES_GLFW);
 
     writer.endObject();
   }
@@ -98,23 +114,44 @@ public class CommandStub extends Command implements IKeyBind, ISerializableJson 
 
     reader.nextName();
     int kc = reader.nextInt();
+
+    // configs written by the 1.12.2 build carry no codes marker and hold LWJGL2 scancodes
+    boolean glfw = false;
+    while (reader.hasNext()) {
+      if (LegacyKeyCodes.CODES_KEY.equals(reader.nextName())) {
+        glfw = LegacyKeyCodes.CODES_GLFW.equals(reader.nextString());
+      } else {
+        reader.skipValue();
+      }
+    }
+
     if (bind != null) {
-      bind(kc);
+      bind(glfw ? kc : LegacyKeyCodes.toGlfw(kc));
+      bindNeedsRewrite = !glfw;
     }
 
     reader.endObject();
   }
 
   @Override
+  public void deserialize() {
+    super.deserialize();
+    if (bindNeedsRewrite) {
+      bindNeedsRewrite = false;
+      serialize();
+    }
+  }
+
+  @Override
   public void bind(int keyCode) {
     if (bind != null) {
-      bind.setKeyCode(keyCode);
-      KeyBinding.resetKeyBindingArrayAndHash();
+      bind.setKey(BindingHelper.getKey(keyCode));
+      KeyMapping.resetMapping();
     }
   }
 
   @Nullable
-  public KeyBinding getBind() {
+  public KeyMapping getBind() {
     return bind;
   }
 

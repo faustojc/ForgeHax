@@ -2,7 +2,7 @@ package com.matt.forgehax.util.blocks;
 
 import com.matt.forgehax.Helper;
 import net.minecraft.client.multiplayer.ServerData;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -30,13 +30,11 @@ public final class PersistentBlockCache {
   private boolean dirty;
 
   public static Path pathFor(String module, int dimension) {
-    ServerData server = Helper.getMinecraft().getCurrentServerData();
+    ServerData server = Helper.getMinecraft().getCurrentServer();
     String identity =
         server != null
-            ? server.serverIP
-            : Helper.getWorld() != null
-              ? Helper.getWorld().getWorldInfo().getWorldName()
-              : "unknown";
+            ? server.ip
+            : Helper.getWorld() != null ? "singleplayer" : "unknown";
     String worldId =
         UUID.nameUUIDFromBytes(identity.getBytes(StandardCharsets.UTF_8)).toString();
     return getFileManager()
@@ -98,11 +96,11 @@ public final class PersistentBlockCache {
         () -> {
           final Map<Long, Integer> loaded = read(path);
           Helper.getMinecraft()
-                .addScheduledTask(
+                .execute(
                     () -> {
                       if (generation == expectedGeneration && path.equals(file)) {
                         for (Map.Entry<Long, Integer> entry : loaded.entrySet()) {
-                          putIfAbsent(BlockPos.fromLong(entry.getKey()), entry.getValue());
+                          putIfAbsent(BlockPos.of(entry.getKey()), entry.getValue());
                         }
                       }
                     });
@@ -112,7 +110,7 @@ public final class PersistentBlockCache {
   public boolean put(BlockPos pos, int color) {
     Map<Long, Integer> entries =
         chunks.computeIfAbsent(chunkKey(pos.getX() >> 4, pos.getZ() >> 4), ignored -> new HashMap<>());
-    Integer previous = entries.put(pos.toLong(), color);
+    Integer previous = entries.put(pos.asLong(), color);
     boolean changed = previous == null || previous.intValue() != color;
     dirty |= changed;
     return changed;
@@ -121,7 +119,7 @@ public final class PersistentBlockCache {
   public boolean remove(BlockPos pos) {
     long key = chunkKey(pos.getX() >> 4, pos.getZ() >> 4);
     Map<Long, Integer> entries = chunks.get(key);
-    if (entries == null || entries.remove(pos.toLong()) == null) {
+    if (entries == null || entries.remove(pos.asLong()) == null) {
       return false;
     }
     if (entries.isEmpty()) {
@@ -144,8 +142,8 @@ public final class PersistentBlockCache {
           continue;
         }
         for (Map.Entry<Long, Integer> entry : entries.entrySet()) {
-          BlockPos pos = BlockPos.fromLong(entry.getKey());
-          if (pos.distanceSq(center) <= distanceSquared) {
+          BlockPos pos = BlockPos.of(entry.getKey());
+          if (pos.distSqr(center) <= distanceSquared) {
             visitor.visit(pos, entry.getValue());
           }
         }
@@ -179,7 +177,7 @@ public final class PersistentBlockCache {
   private void putIfAbsent(BlockPos pos, int color) {
     chunks
         .computeIfAbsent(chunkKey(pos.getX() >> 4, pos.getZ() >> 4), ignored -> new HashMap<>())
-        .putIfAbsent(pos.toLong(), color);
+        .putIfAbsent(pos.asLong(), color);
   }
 
   public interface Visitor {

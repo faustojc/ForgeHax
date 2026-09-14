@@ -1,7 +1,7 @@
 package com.matt.forgehax.util.math;
 
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.Mth;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.Objects;
 
@@ -144,12 +144,12 @@ public abstract class Angle {
     };
   }
 
-  public Vec3d getDirectionVector() {
-    float cy = MathHelper.cos(-inDegrees().getYaw() * 0.017453292F - (float) Math.PI);
-    float sy = MathHelper.sin(-inDegrees().getYaw() * 0.017453292F - (float) Math.PI);
-    float cp = -MathHelper.cos(-inDegrees().getPitch() * 0.017453292F);
-    float sp = MathHelper.sin(-inDegrees().getPitch() * 0.017453292F);
-    return new Vec3d(sy * cp, sp, cy * cp);
+  public Vec3 getDirectionVector() {
+    float cy = Mth.cos(-inDegrees().getYaw() * 0.017453292F - (float) Math.PI);
+    float sy = Mth.sin(-inDegrees().getYaw() * 0.017453292F - (float) Math.PI);
+    float cp = -Mth.cos(-inDegrees().getPitch() * 0.017453292F);
+    float sp = Mth.sin(-inDegrees().getPitch() * 0.017453292F);
+    return new Vec3(sy * cp, sp, cy * cp);
   }
 
   public float[] toArray() {

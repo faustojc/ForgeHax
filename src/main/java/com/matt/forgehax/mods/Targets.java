@@ -12,16 +12,17 @@ import com.matt.forgehax.util.entry.ClassEntry;
 import com.matt.forgehax.util.mod.BaseMod;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.entity.Entity;
-import net.minecraft.entity.EntityList;
-import net.minecraft.entity.item.EntityArmorStand;
-import net.minecraft.entity.item.EntityBoat;
-import net.minecraft.entity.item.EntityEnderCrystal;
-import net.minecraft.entity.item.EntityMinecart;
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.entity.projectile.EntityFireball;
-import net.minecraft.entity.projectile.EntityShulkerBullet;
-import net.minecraft.util.ResourceLocation;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
+import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.Fireball;
+import net.minecraft.world.entity.projectile.ShulkerBullet;
+import net.minecraft.world.entity.vehicle.AbstractMinecart;
+import net.minecraft.world.entity.vehicle.Boat;
 
 import java.util.Comparator;
 import java.util.Iterator;
@@ -41,12 +42,12 @@ public class Targets extends BaseMod {
    * Covers wither skulls and dragon fireballs too, both extend EntityFireball
    */
   private static final Class<?>[] MISC_TYPES = {
-      EntityArmorStand.class,
-      EntityEnderCrystal.class,
-      EntityFireball.class,
-      EntityShulkerBullet.class,
-      EntityBoat.class,
-      EntityMinecart.class,
+      ArmorStand.class,
+      EndCrystal.class,
+      Fireball.class,
+      ShulkerBullet.class,
+      Boat.class,
+      AbstractMinecart.class,
   };
 
   private static Targets instance;
@@ -157,14 +158,14 @@ public class Targets extends BaseMod {
    * picked earlier in the tick and may have died since.
    */
   public static boolean isAttackable(Entity entity) {
-    if (entity instanceof EntityArmorStand && ((EntityArmorStand) entity).hasMarker()) {
+    if (entity instanceof ArmorStand && ((ArmorStand) entity).isMarker()) {
       return false;
     }
-    return EntityUtils.isLiving(entity) ? EntityUtils.isAlive(entity) : !entity.isDead;
+    return EntityUtils.isLiving(entity) ? EntityUtils.isAlive(entity) : entity.isAlive();
   }
 
   private static Optional<ResourceLocation> findEntityName(String name) {
-    return EntityList.getEntityNameList()
+    return BuiltInRegistries.ENTITY_TYPE.keySet()
                      .stream()
                      .filter(rl -> rl.toString().toLowerCase().contains(name))
                      .min(Comparator.comparingInt(rl -> rl.toString().length()));
@@ -177,7 +178,7 @@ public class Targets extends BaseMod {
   private boolean isAllowed(Entity entity) {
     if (!friends.get()
         && EntityUtils.isPlayer(entity)
-        && PlayerUtils.isFriend((EntityPlayer) entity)) {
+        && PlayerUtils.isFriend((Player) entity)) {
       return false;
     }
     if (!teammates.get() && EntityUtils.isOnLocalTeam(entity)) {
@@ -271,7 +272,8 @@ public class Targets extends BaseMod {
                 return;
               }
 
-              Class<? extends Entity> clazz = EntityList.getClass(match.get());
+              EntityType<?> type = BuiltInRegistries.ENTITY_TYPE.get(match.get());
+              Class<? extends Entity> clazz = type == null ? null : type.getBaseClass();
 
               if (clazz == null) {
                 data.write(String.format("No class registered for \"%s\"", match.get()));

@@ -1,7 +1,7 @@
 package com.matt.forgehax.util;
 
 import com.matt.forgehax.util.color.Color;
-import net.minecraft.block.material.MapColor;
+import net.minecraft.world.level.material.MapColor;
 
 /**
  * Created by Babbaj on 8/19/2017.
@@ -13,15 +13,16 @@ public class MapColors {
    */
   private static final int[] COLOR_LIST;
   /**
-   * list of base colors from {@link net.minecraft.block.material.MapColor}
+   * list of base colors from {@link net.minecraft.world.level.material.MapColor}
    */
   private static final int[] BASE_COLORS;
 
   static {
-    // find the length of array that contains non null map colors
+    // MapColor.MATERIAL_COLORS is private in 1.20.1; walk ids via the public byId()
+    // accessor (returns NONE, never null, for an unused id) to find the highest defined one.
     int baseColorsLength = 0;
-    for (int i = MapColor.COLORS.length - 1; i >= 0; i--) {
-      if (MapColor.COLORS[i] != null) {
+    for (int i = 63; i >= 0; i--) {
+      if (MapColor.byId(i) != MapColor.NONE || i == 0) {
         baseColorsLength = i + 1;
         break;
       }
@@ -31,7 +32,7 @@ public class MapColors {
 
     for (int i = 0; i < BASE_COLORS.length; i++) {
       // get integer color values from MapColor object list
-      BASE_COLORS[i] = MapColor.COLORS[i].colorValue;
+      BASE_COLORS[i] = MapColor.byId(i).col;
     }
 
     for (int i = 0;

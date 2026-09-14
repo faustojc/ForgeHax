@@ -1,7 +1,6 @@
 package com.matt.forgehax.mods.commands;
 
 import com.google.common.util.concurrent.FutureCallback;
-import com.matt.forgehax.asm.reflection.FastReflection;
 import com.matt.forgehax.mods.managers.AccountManager;
 import com.matt.forgehax.util.command.Command;
 import com.matt.forgehax.util.command.CommandBuilders;
@@ -224,7 +223,9 @@ public class HelpCommand extends CommandMod {
         .processor(
             data -> {
               if (getLocalPlayer() != null) {
-                getLocalPlayer().respawnPlayer();
+                getLocalPlayer().connection.send(
+                    new net.minecraft.network.protocol.game.ServerboundClientCommandPacket(
+                        net.minecraft.network.protocol.game.ServerboundClientCommandPacket.Action.PERFORM_RESPAWN));
                 data.write("Respawn packet sent");
               } else {
                 data.write("Failed to send respawn packet (player is null)");
@@ -240,8 +241,8 @@ public class HelpCommand extends CommandMod {
         .name("clear")
         .description("Clears chat")
         .options(p -> p.acceptsAll(Arrays.asList("all", "a"), "Also clear sent message history"))
-        .processor(d -> MC.addScheduledTask(
-            () -> MC.ingameGUI.getChatGUI().clearChatMessages(d.hasOption("all")))
+        .processor(d -> MC.execute(
+            () -> MC.gui.getChat().clearMessages(d.hasOption("all")))
         )
         .build();
   }
@@ -256,7 +257,7 @@ public class HelpCommand extends CommandMod {
         .name("reauth")
         .description("Reauths with the account you're currently using.")
         .processor(data -> {
-          final String alias = FastReflection.Fields.Minecraft_session.get(MC).getUsername();
+          final String alias = MC.getUser().getName();
           AccountManager.INSTANCE.login(alias);
         })
         .build();

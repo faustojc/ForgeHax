@@ -4,12 +4,11 @@ import com.matt.forgehax.asm.events.PacketEvent;
 import com.matt.forgehax.util.PacketHelper;
 import com.matt.forgehax.util.mod.ServiceMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
-import net.minecraft.network.play.client.CPacketEntityAction;
-import net.minecraft.network.play.client.CPacketEntityAction.Action;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
+import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket.Action;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import static com.matt.forgehax.Helper.getLocalPlayer;
-import static com.matt.forgehax.asm.reflection.FastReflection.Fields.CPacketEntityAction_entityID;
 
 @RegisterMod
 public class SneakService extends ServiceMod {
@@ -46,14 +45,13 @@ public class SneakService extends ServiceMod {
 
   @SubscribeEvent
   public void onPacketSend(PacketEvent.Outgoing.Pre event) {
-    if (event.getPacket() instanceof CPacketEntityAction) {
-      CPacketEntityAction packet = event.getPacket();
-      int id = CPacketEntityAction_entityID.get(packet);
-      if (getLocalPlayer().getEntityId() == id
-          && (packet.getAction() == Action.START_SNEAKING
-          || packet.getAction() == Action.STOP_SNEAKING)
+    if (event.getPacket() instanceof ServerboundPlayerCommandPacket) {
+      ServerboundPlayerCommandPacket packet = event.getPacket();
+      if (getLocalPlayer().getId() == packet.getId()
+          && (packet.getAction() == Action.PRESS_SHIFT_KEY
+          || packet.getAction() == Action.RELEASE_SHIFT_KEY)
           && !PacketHelper.isIgnored(packet)) {
-        sneakingClient = packet.getAction() == Action.START_SNEAKING;
+        sneakingClient = packet.getAction() == Action.PRESS_SHIFT_KEY;
         if (isSuppressing()) {
           event.setCanceled(true);
         } else {

@@ -7,12 +7,12 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.matt.forgehax.Globals;
 import com.matt.forgehax.util.serialization.GsonConstant;
-import net.minecraft.client.entity.EntityPlayerSP;
 
 import javax.net.ssl.HttpsURLConnection;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static com.matt.forgehax.Helper.getLocalPlayer;
@@ -43,7 +43,7 @@ public class PlayerInfo implements Globals, GsonConstant {
     Objects.requireNonNull(id);
     this.id = id;
     this.names = ImmutableList.copyOf(lookupNames(id));
-    this.offlineId = EntityPlayerSP.getOfflineUUID(getName());
+    this.offlineId = getOfflineUUID(getName());
     this.isOfflinePlayer = false;
   }
 
@@ -62,12 +62,12 @@ public class PlayerInfo implements Globals, GsonConstant {
 
     this.id = uuid;
     this.names = ImmutableList.copyOf(lookupNames(uuid));
-    this.offlineId = EntityPlayerSP.getOfflineUUID(name);
+    this.offlineId = getOfflineUUID(name);
     this.isOfflinePlayer = false;
   }
 
   public PlayerInfo(String name, boolean dummy) {
-    this.id = EntityPlayerSP.getOfflineUUID(name);
+    this.id = getOfflineUUID(name);
     this.names = Collections.singletonList(new Name(name));
     this.offlineId = this.id;
     this.isOfflinePlayer = true;
@@ -185,7 +185,13 @@ public class PlayerInfo implements Globals, GsonConstant {
   }
 
   public boolean isLocalPlayer() {
-    return String.CASE_INSENSITIVE_ORDER.compare(getName(), getLocalPlayer().getName()) == 0;
+    return String.CASE_INSENSITIVE_ORDER.compare(
+        getName(), getLocalPlayer().getGameProfile().getName()) == 0;
+  }
+
+  private static UUID getOfflineUUID(String name) {
+    return UUID.nameUUIDFromBytes(
+        ("OfflinePlayer:" + name).getBytes(StandardCharsets.UTF_8));
   }
 
   public boolean matches(UUID otherId) {
