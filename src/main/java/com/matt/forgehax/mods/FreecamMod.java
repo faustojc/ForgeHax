@@ -11,7 +11,10 @@ import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
 import com.mojang.authlib.GameProfile;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.player.RemotePlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
@@ -23,6 +26,9 @@ import net.minecraftforge.client.event.RenderLivingEvent;
 import net.minecraftforge.client.event.RenderNameTagEvent;
 import net.minecraftforge.event.level.LevelEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+
+import javax.annotation.Nullable;
+import java.util.UUID;
 
 import static com.matt.forgehax.Helper.getLocalPlayer;
 import static com.matt.forgehax.Helper.getWorld;
@@ -71,7 +77,12 @@ public class FreecamMod extends ToggleMod {
 
     angle = LocalPlayerUtils.getViewAngles();
 
-    originalPlayer = new RemotePlayer(getWorld(), getLocalPlayer().getGameProfile());
+    // the client entity lookup is keyed by UUID: reusing the local player's profile makes the
+    // level reject the dummy from its id map, so removeEntity(-100) could never remove it
+    GameProfile profile = getLocalPlayer().getGameProfile();
+    GameProfile dummyProfile = new GameProfile(UUID.randomUUID(), profile.getName());
+    dummyProfile.getProperties().putAll(profile.getProperties());
+    originalPlayer = new DummyPlayer(getWorld(), dummyProfile);
     originalPlayer.copyPosition(getLocalPlayer());
     originalPlayer.setYHeadRot(getLocalPlayer().getYHeadRot());
     originalPlayer.getInventory().replaceWith(getLocalPlayer().getInventory());
@@ -186,6 +197,16 @@ public class FreecamMod extends ToggleMod {
 
     @Override
     public void aiStep() {
+    }
+
+    // skins resolve through the tab list by UUID; borrow the local player's entry
+    @Nullable
+    @Override
+    protected PlayerInfo getPlayerInfo() {
+      ClientPacketListener connection = Minecraft.getInstance().getConnection();
+      return connection == null || getLocalPlayer() == null
+          ? null
+          : connection.getPlayerInfo(getLocalPlayer().getUUID());
     }
   }
 }
