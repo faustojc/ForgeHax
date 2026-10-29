@@ -49,16 +49,15 @@ public class LocalPlayerUtils implements Globals {
           return;
         }
 
-        Abilities gameModeAbilities = new Abilities();
         GameType gameType = getPlayerController() == null
             ? GameType.SURVIVAL
             : getPlayerController().getPlayerMode();
-        gameType.updatePlayerAbilities(gameModeAbilities);
-
+        // apply the game mode to the player's own abilities, as MultiPlayerGameMode.setLocalMode
+        // does: mods hooking updatePlayerAbilities (e.g. Apothic Attributes' flight attribute)
+        // resolve the owning player from the Abilities and crash on a detached instance
         Abilities abilities = player.getAbilities();
-        abilities.mayfly = gameModeAbilities.mayfly;
-        abilities.flying = gameModeAbilities.mayfly && abilities.flying;
-        abilities.setFlyingSpeed(gameModeAbilities.getFlyingSpeed());
+        gameType.updatePlayerAbilities(abilities);
+        abilities.setFlyingSpeed(new Abilities().getFlyingSpeed());
       });
     }
   };
