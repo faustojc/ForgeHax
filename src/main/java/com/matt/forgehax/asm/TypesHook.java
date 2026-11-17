@@ -133,50 +133,9 @@ public interface TypesHook {
                              .finish()
                              .build();
 
-    ASMMethod ForgeHaxHooks_onPutColorMultiplier =
-        Classes.ForgeHaxHooks.childMethod()
-                             .setName("onPutColorMultiplier")
-                             .setReturnType(int.class)
-                             .beginParameters()
-                             .add(float.class)
-                             .add(float.class)
-                             .add(float.class)
-                             .add(int.class)
-                             .add(boolean[].class)
-                             .finish()
-                             .build();
 
-    ASMMethod ForgeHaxHooks_onPreRenderBlockLayer =
-        Classes.ForgeHaxHooks.childMethod()
-                             .setName("onPreRenderBlockLayer")
-                             .setReturnType(boolean.class)
-                             .beginParameters()
-                             .add(TypesMc.Classes.BlockRenderLayer)
-                             .add(double.class)
-                             .finish()
-                             .build();
 
-    ASMMethod ForgeHaxHooks_onPostRenderBlockLayer =
-        Classes.ForgeHaxHooks.childMethod()
-                             .setName("onPostRenderBlockLayer")
-                             .setReturnType(void.class)
-                             .beginParameters()
-                             .add(TypesMc.Classes.BlockRenderLayer)
-                             .add(double.class)
-                             .finish()
-                             .build();
 
-    ASMMethod ForgeHaxHooks_onRenderBlockInLayer =
-        Classes.ForgeHaxHooks.childMethod()
-                             .setName("onRenderBlockInLayer")
-                             .setReturnType(TypesMc.Classes.BlockRenderLayer)
-                             .beginParameters()
-                             .add(TypesMc.Classes.Block)
-                             .add(TypesMc.Classes.IBlockState)
-                             .add(TypesMc.Classes.BlockRenderLayer)
-                             .add(TypesMc.Classes.BlockRenderLayer)
-                             .finish()
-                             .build();
 
     ASMMethod ForgeHaxHooks_onSetupTerrain =
         Classes.ForgeHaxHooks.childMethod()

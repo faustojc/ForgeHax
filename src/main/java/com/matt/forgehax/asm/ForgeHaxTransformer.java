@@ -42,7 +42,6 @@ public class ForgeHaxTransformer implements IClassTransformer, ASMCommon {
     registerTransformer(new PlayerControllerMCPatch());
     registerTransformer(new RenderChunkPatch());
     registerTransformer(new RenderGlobalPatch());
-    registerTransformer(new BufferBuilderPatch());
     registerTransformer(new VisGraphPatch());
     registerTransformer(new WorldPatch());
 

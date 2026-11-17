@@ -330,16 +330,6 @@ public interface TypesMc {
 
   interface Methods {
 
-    ASMMethod Block_canRenderInLayer =
-        Classes.Block.childMethod()
-                     .setName("canRenderInLayer")
-                     .setReturnType(boolean.class)
-                     .beginParameters()
-                     .add(Classes.IBlockState)
-                     .add(Classes.BlockRenderLayer)
-                     .finish()
-                     .autoAssign()
-                     .build();
     ASMMethod Block_addCollisionBoxToList =
         Classes.Block.childMethod()
                      .setName("addCollisionBoxToList")
@@ -563,18 +553,6 @@ public interface TypesMc {
                             .emptyParameters()
                             .autoAssign()
                             .build();
-    ASMMethod RenderGlobal_renderBlockLayer =
-        Classes.RenderGlobal.childMethod()
-                            .setName("renderBlockLayer")
-                            .setReturnType(int.class)
-                            .beginParameters()
-                            .add(Classes.BlockRenderLayer)
-                            .add(double.class)
-                            .add(int.class)
-                            .add(Classes.Entity)
-                            .finish()
-                            .autoAssign()
-                            .build();
     ASMMethod RenderGlobal_setupTerrain =
         Classes.RenderGlobal.childMethod()
                             .setName("setupTerrain")
@@ -606,19 +584,6 @@ public interface TypesMc {
                             .finish()
                             .autoAssign()
                             .build();
-
-    ASMMethod BufferBuilder_putColorMultiplier =
-        Classes.BufferBuilder.childMethod()
-                             .setName("putColorMultiplier")
-                             .setReturnType(void.class)
-                             .beginParameters()
-                             .add(float.class)
-                             .add(float.class)
-                             .add(float.class)
-                             .add(int.class)
-                             .finish()
-                             .autoAssign()
-                             .build();
 
     ASMMethod VisGraph_setOpaqueCube =
         Classes.VisGraph.childMethod()

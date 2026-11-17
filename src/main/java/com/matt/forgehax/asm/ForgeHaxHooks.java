@@ -34,7 +34,6 @@ import net.minecraft.world.World;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.eventhandler.Event;
 
-import java.nio.ByteOrder;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
@@ -139,32 +138,6 @@ public class ForgeHaxHooks implements ASMCommon {
           .forgeEvent(ApplyCollisionMotionEvent.class)
           .build();
   /**
-   * onPutColorMultiplier
-   */
-  public static final HookReporter HOOK_onPutColorMultiplier =
-      newHookReporter()
-          .hook("onPutColorMultiplier")
-          .dependsOn(TypesMc.Methods.BufferBuilder_putColorMultiplier)
-          .build();
-  /**
-   * onPreRenderBlockLayer
-   */
-  public static final HookReporter HOOK_onPreRenderBlockLayer =
-      newHookReporter()
-          .hook("onPreRenderBlockLayer")
-          .dependsOn(TypesMc.Methods.RenderGlobal_renderBlockLayer)
-          .forgeEvent(RenderBlockLayerEvent.Pre.class)
-          .build();
-  /**
-   * onPostRenderBlockLayer
-   */
-  public static final HookReporter HOOK_onPostRenderBlockLayer =
-      newHookReporter()
-          .hook("onPostRenderBlockLayer")
-          .dependsOn(TypesMc.Methods.RenderGlobal_renderBlockLayer)
-          .forgeEvent(RenderBlockLayerEvent.Post.class)
-          .build();
-  /**
    * onSetupTerrain
    */
   public static final HookReporter HOOK_onSetupTerrain =
@@ -207,15 +180,6 @@ public class ForgeHaxHooks implements ASMCommon {
           .hook("onApplyClimbableBlockMovement")
           // no hook exists
           .forgeEvent(ApplyClimbableBlockMovement.class)
-          .build();
-  /**
-   * onRenderBlockInLayer
-   */
-  public static final HookReporter HOOK_onRenderBlockInLayer =
-      newHookReporter()
-          .hook("onRenderBlockInLayer")
-          .dependsOn(TypesMc.Methods.Block_canRenderInLayer)
-          .forgeEvent(RenderBlockInLayerEvent.class)
           .build();
   /**
    * onBlockRender
@@ -418,8 +382,6 @@ public class ForgeHaxHooks implements ASMCommon {
   public static boolean isBoatSetYawActivated = false;
   public static boolean isNotRowingBoatActivated = false;
   public static boolean doIncreaseTabListSize = false;
-  public static boolean SHOULD_UPDATE_ALPHA = false;
-  public static float COLOR_MULTIPLIER_ALPHA = 150.f / 255.f;
 
   public static List<HookReporter> getReporters() {
     return Collections.unmodifiableList(ALL_REPORTERS);
@@ -509,37 +471,6 @@ public class ForgeHaxHooks implements ASMCommon {
         new ApplyCollisionMotionEvent(entity, collidedWithEntity, x, 0.D, z));
   }
 
-  public static int onPutColorMultiplier(float r, float g, float b, int buffer, boolean[] flag) {
-    flag[0] = SHOULD_UPDATE_ALPHA;
-    if (HOOK_onPutColorMultiplier.reportHook() && SHOULD_UPDATE_ALPHA) {
-      if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
-        int red = (int) ((float) (buffer & 255) * r);
-        int green = (int) ((float) (buffer >> 8 & 255) * g);
-        int blue = (int) ((float) (buffer >> 16 & 255) * b);
-        int alpha = (int) (((float) (buffer >> 24 & 255) * COLOR_MULTIPLIER_ALPHA));
-        buffer = alpha << 24 | blue << 16 | green << 8 | red;
-      } else {
-        int red = (int) ((float) (buffer >> 24 & 255) * r);
-        int green = (int) ((float) (buffer >> 16 & 255) * g);
-        int blue = (int) ((float) (buffer >> 8 & 255) * b);
-        int alpha = (int) (((float) (buffer & 255) * COLOR_MULTIPLIER_ALPHA));
-        buffer = red << 24 | green << 16 | blue << 8 | alpha;
-      }
-    }
-    return buffer;
-  }
-
-  public static boolean onPreRenderBlockLayer(BlockRenderLayer layer, double partialTicks) {
-    return HOOK_onPreRenderBlockLayer.reportHook()
-        && MinecraftForge.EVENT_BUS.post(new RenderBlockLayerEvent.Pre(layer, partialTicks));
-  }
-
-  public static void onPostRenderBlockLayer(BlockRenderLayer layer, double partialTicks) {
-    if (HOOK_onPostRenderBlockLayer.reportHook()) {
-      MinecraftForge.EVENT_BUS.post(new RenderBlockLayerEvent.Post(layer, partialTicks));
-    }
-  }
-
   public static boolean onSetupTerrain(Entity renderEntity, boolean playerSpectator) {
     if (HOOK_onSetupTerrain.reportHook()) {
       SetupTerrainEvent event = new SetupTerrainEvent(renderEntity, playerSpectator);
@@ -573,18 +504,6 @@ public class ForgeHaxHooks implements ASMCommon {
   public static boolean onApplyClimbableBlockMovement(EntityLivingBase livingBase) {
     return HOOK_onApplyClimbableBlockMovement.reportHook()
         && MinecraftForge.EVENT_BUS.post(new ApplyClimbableBlockMovement(livingBase));
-  }
-
-  public static BlockRenderLayer onRenderBlockInLayer(
-      Block block, IBlockState state, BlockRenderLayer layer, BlockRenderLayer compareToLayer) {
-    if (HOOK_onRenderBlockInLayer.reportHook()) {
-      RenderBlockInLayerEvent event =
-          new RenderBlockInLayerEvent(block, state, layer, compareToLayer);
-      MinecraftForge.EVENT_BUS.post(event);
-      return event.getLayer();
-    } else {
-      return layer;
-    }
   }
 
   @Deprecated

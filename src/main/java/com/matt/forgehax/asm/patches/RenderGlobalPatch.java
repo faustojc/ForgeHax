@@ -50,67 +50,6 @@ public class RenderGlobalPatch extends ClassTransformer {
   }
 
   @RegisterMethodTransformer
-  private class RenderBlockLayer extends MethodTransformer {
-
-    @Override
-    public ASMMethod getMethod() {
-      return Methods.RenderGlobal_renderBlockLayer;
-    }
-
-    @Inject(description = "Add hooks at the top and bottom of the method")
-    public void inject(MethodNode main) {
-      AbstractInsnNode preNode =
-          ASMHelper.findPattern(
-              main.instructions.getFirst(),
-              new int[]{
-                  INVOKESTATIC,
-                  0x00,
-                  0x00,
-                  ALOAD,
-                  GETSTATIC,
-                  IF_ACMPNE,
-                  0x00,
-                  0x00,
-                  ALOAD,
-                  GETFIELD,
-                  GETFIELD
-              },
-              "x??xxx??xxx"
-          );
-      AbstractInsnNode postNode =
-          ASMHelper.findPattern(
-              main.instructions.getFirst(),
-              new int[]{ALOAD, GETFIELD, GETFIELD, INVOKEVIRTUAL, 0x00, 0x00, ILOAD, IRETURN},
-              "xxxx??xx"
-          );
-
-      Objects.requireNonNull(preNode, "Find pattern failed for preNode");
-      Objects.requireNonNull(postNode, "Find pattern failed for postNode");
-
-      LabelNode endJump = new LabelNode();
-
-      InsnList insnPre = new InsnList();
-      insnPre.add(new InsnNode(ICONST_0));
-      insnPre.add(new VarInsnNode(ISTORE, 6));
-      insnPre.add(new VarInsnNode(ALOAD, 1));
-      insnPre.add(new VarInsnNode(DLOAD, 2));
-      insnPre.add(
-          ASMHelper.call(INVOKESTATIC, TypesHook.Methods.ForgeHaxHooks_onPreRenderBlockLayer));
-      insnPre.add(new JumpInsnNode(IFNE, endJump));
-
-      InsnList insnPost = new InsnList();
-      insnPost.add(new VarInsnNode(ALOAD, 1));
-      insnPost.add(new VarInsnNode(DLOAD, 2));
-      insnPost.add(
-          ASMHelper.call(INVOKESTATIC, TypesHook.Methods.ForgeHaxHooks_onPostRenderBlockLayer));
-      insnPost.add(endJump);
-
-      main.instructions.insertBefore(preNode, insnPre);
-      main.instructions.insertBefore(postNode, insnPost);
-    }
-  }
-
-  @RegisterMethodTransformer
   private class SetupTerrain extends MethodTransformer {
 
     @Override
