@@ -327,12 +327,6 @@ public interface FastReflection extends ASMCommon {
                        .setName("rightClickDelayTimer")
                        .autoAssign()
                        .asField();
-    FastField<Timer> Minecraft_timer =
-        FastTypeBuilder.create()
-                       .setInsideClass(Minecraft.class)
-                       .setName("timer")
-                       .autoAssign()
-                       .asField();
 
     /**
      * PlayerControllerMP
@@ -478,15 +472,6 @@ public interface FastReflection extends ASMCommon {
         FastTypeBuilder.create()
                        .setInsideClass(NBTTagCompound.class)
                        .setName("tagMap")
-                       .autoAssign()
-                       .asField();
-    /**
-     * Timer
-     */
-    FastField<Float> Timer_tickLength =
-        FastTypeBuilder.create()
-                       .setInsideClass(Timer.class)
-                       .setName("tickLength")
                        .autoAssign()
                        .asField();
     /**
