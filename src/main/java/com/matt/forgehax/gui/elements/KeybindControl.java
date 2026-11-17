@@ -83,7 +83,7 @@ public final class KeybindControl {
     if (button < 0) {
       return CaptureResult.CANCELED;
     }
-    setKeyCode(-100 - button);
+    setKeyCode(-100 + button);
     return CaptureResult.BOUND;
   }
 

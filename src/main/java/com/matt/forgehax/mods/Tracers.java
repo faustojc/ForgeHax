@@ -201,7 +201,7 @@ public class Tracers extends ToggleMod implements Colors {
             double ang = Math.toDegrees(Math.acos((ux * wx + uy * wy) / (mu * mw)));
 
             // don't allow NaN angles
-            if (ang == Float.NaN) {
+            if (Double.isNaN(ang)) {
               ang = 0;
             }
 

@@ -22,7 +22,11 @@ public class WorldEventService extends ServiceMod {
 
   @SubscribeEvent
   public void onWorldLoad(WorldEvent.Load event) {
-    event.getWorld().addEventListener(WORLD_LISTENER);
+    // the integrated server's WorldServer also fires Load on this bus; only the client world may
+    // produce entity events
+    if (event.getWorld().isRemote) {
+      event.getWorld().addEventListener(WORLD_LISTENER);
+    }
     MinecraftForge.EVENT_BUS.post(new WorldChangeEvent(event.getWorld()));
   }
 

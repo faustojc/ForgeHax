@@ -82,7 +82,10 @@ public class Scaffold extends ToggleMod implements PositionRotationManager.Movem
                             .stream()
                             .filter(InvItem::nonNull)
                             .filter(item -> item.getItem() instanceof ItemBlock)
-                            .filter(item -> Block.getBlockFromItem(item.getItem()).getDefaultState().isFullBlock())
+                            .filter(item -> Block.FULL_BLOCK_AABB.equals(
+                                Block.getBlockFromItem(item.getItem())
+                                     .getDefaultState()
+                                     .getBoundingBox(getWorld(), BlockPos.ORIGIN)))
                             .max(Comparator.comparingInt(LocalPlayerInventory::getHotbarDistance))
                             .orElse(InvItem.EMPTY);
 

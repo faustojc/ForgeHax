@@ -7,6 +7,7 @@ import com.matt.forgehax.util.command.callbacks.CallbackData;
 import com.matt.forgehax.util.command.exception.CommandBuildException;
 import com.matt.forgehax.util.command.exception.CommandExecuteException;
 import com.matt.forgehax.util.key.IKeyBind;
+import com.matt.forgehax.util.key.LegacyKeyCodes;
 import com.matt.forgehax.util.serialization.ISerializableJson;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraftforge.fml.client.registry.ClientRegistry;
@@ -25,6 +26,8 @@ public class CommandStub extends Command implements IKeyBind, ISerializableJson 
   public static final String KEYBIND_OPTIONS = "Command.keybind_options";
 
   private final KeyBinding bind;
+
+  private boolean bindNeedsRewrite;
 
   protected CommandStub(Map<String, Object> data) throws CommandBuildException {
     super(data);
@@ -94,15 +97,51 @@ public class CommandStub extends Command implements IKeyBind, ISerializableJson 
 
   @Override
   public void deserialize(JsonReader reader) throws IOException {
-    reader.beginObject();
-
-    reader.nextName();
-    int kc = reader.nextInt();
-    if (bind != null) {
+    boolean[] glfw = new boolean[1];
+    Integer kc = BindJson.read(reader, glfw);
+    if (bind != null && kc != null) {
       bind(kc);
+      bindNeedsRewrite = glfw[0];
     }
+  }
 
-    reader.endObject();
+  /**
+   * Nested so it can be tested without initializing Command, whose static state needs the game.
+   */
+  static final class BindJson {
+
+    /**
+     * Reads one bind object as a native LWJGL2 code, or null when it holds no bind. Configs written
+     * by the 1.20.1 build mark their GLFW codes, which are translated once; glfwOut[0] reports it.
+     */
+    @Nullable
+    static Integer read(JsonReader reader, boolean[] glfwOut) throws IOException {
+      Integer kc = null;
+      boolean glfw = false;
+      reader.beginObject();
+      while (reader.hasNext()) {
+        String name = reader.nextName();
+        if ("bind".equals(name)) {
+          kc = reader.nextInt();
+        } else if (LegacyKeyCodes.CODES_KEY.equals(name)) {
+          glfw = LegacyKeyCodes.CODES_GLFW.equals(reader.nextString());
+        } else {
+          reader.skipValue();
+        }
+      }
+      reader.endObject();
+      glfwOut[0] = glfw;
+      return kc != null && glfw ? Integer.valueOf(LegacyKeyCodes.toLwjgl2(kc)) : kc;
+    }
+  }
+
+  @Override
+  public void deserialize() {
+    super.deserialize();
+    if (bindNeedsRewrite) {
+      bindNeedsRewrite = false;
+      serialize();
+    }
   }
 
   @Override

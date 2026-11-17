@@ -91,6 +91,9 @@ public class ClickGui extends GuiScreen implements Globals {
   @Override
   protected void keyTyped(char typedChar, int keyCode) throws IOException {
     if (capturingBind) {
+      if (keyCode == Keyboard.KEY_NONE) {
+        return; // character-only event, no key to bind
+      }
       keybind.captureKeyboard(keyCode);
       capturingBind = false;
       return;

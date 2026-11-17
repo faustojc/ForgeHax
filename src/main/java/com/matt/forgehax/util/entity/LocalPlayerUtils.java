@@ -17,6 +17,7 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.RayTraceResult;
 import net.minecraft.util.math.RayTraceResult.Type;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.GameType;
 
 import java.util.Optional;
 
@@ -49,13 +50,14 @@ public class LocalPlayerUtils implements Globals {
           return;
         }
 
-        PlayerCapabilities gmCaps = new PlayerCapabilities();
-        MC.playerController.getCurrentGameType().configurePlayerCapabilities(gmCaps);
-
+        GameType gameType = getPlayerController() == null
+            ? GameType.SURVIVAL
+            : getPlayerController().getCurrentGameType();
+        // apply the game mode to the player's own capabilities, as
+        // PlayerControllerMP.setGameType does, rather than to a detached instance
         PlayerCapabilities capabilities = player.capabilities;
-        capabilities.allowFlying = gmCaps.allowFlying;
-        capabilities.isFlying = gmCaps.allowFlying && capabilities.isFlying;
-        capabilities.setFlySpeed(gmCaps.getFlySpeed());
+        gameType.configurePlayerCapabilities(capabilities);
+        capabilities.setFlySpeed(new PlayerCapabilities().getFlySpeed());
       });
     }
   };
@@ -109,6 +111,9 @@ public class LocalPlayerUtils implements Globals {
   }
 
   public static RayTraceResult getMouseOverBlockTrace() {
+    if (MC.objectMouseOver == null || getWorld() == null) {
+      return null;
+    }
     return Optional.ofNullable(MC.objectMouseOver)
                    .filter(tr -> tr.getBlockPos() != null) // no its not intelliJ
                    .filter(
@@ -121,7 +126,7 @@ public class LocalPlayerUtils implements Globals {
 
   public static RayTraceResult getViewTrace(
       Entity entity, Vec3d direction, float partialTicks, double reach, double reachAttack) {
-    if (entity == null) {
+    if (entity == null || getWorld() == null) {
       return null;
     }
 
@@ -139,7 +144,7 @@ public class LocalPlayerUtils implements Globals {
         getWorld()
             .getEntitiesInAABBexcluding(
                 entity,
-                entity.getEntityBoundingBox().expand(dir.x, dir.y, dir.y).grow(1.D),
+                entity.getEntityBoundingBox().expand(dir.x, dir.y, dir.z).grow(1.D),
                 Predicates.and(
                     EntitySelectors.NOT_SPECTATING,
                     ent -> ent != null && ent.canBeCollidedWith()
@@ -181,6 +186,9 @@ public class LocalPlayerUtils implements Globals {
   }
 
   public static boolean isInReach(Vec3d start, Vec3d end) {
+    if (getPlayerController() == null) {
+      return false;
+    }
     return start.squareDistanceTo(end)
         < getPlayerController().getBlockReachDistance()
         * getPlayerController().getBlockReachDistance();

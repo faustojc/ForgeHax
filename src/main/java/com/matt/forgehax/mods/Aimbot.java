@@ -232,12 +232,14 @@ public class Aimbot extends ToggleMod implements PositionRotationManager.Movemen
   }
 
   /**
-   * How far the item has been drawn right now. A bow's arc depends on it, so it has to come from the
-   * player rather than a setting now that the player is the one releasing the shot. Throwables
-   * ignore the charge entirely.
+   * The force the shot leaves with, which is the full draw and not the draw so far. A bow reaches
+   * six blocks five ticks into its draw, so solving against the instantaneous charge left every
+   * target unreachable - and therefore unacquirable, since acquisition needs a launch solution -
+   * for the first half of every draw. Throwables ignore the charge entirely and their max is their
+   * only force.
    */
-  private int getCharge(EntityPlayerSP player) {
-    return player.isHandActive() ? Math.max(1, player.getItemInUseMaxCount()) : 1;
+  private double getForce(Projectile projectile) {
+    return projectile.getMaxForce();
   }
 
   private boolean isVisible(Entity entity, boolean useProjectile) {
@@ -248,7 +250,7 @@ public class Aimbot extends ToggleMod implements PositionRotationManager.Movemen
       Projectile projectile = getHeldProjectile();
       Vec3d shootPos = Projectile.getEntityShootPos(player);
       Vec3d inherited = getInheritedMotion();
-      double force = projectile.getForce(getCharge(player));
+      double force = getForce(projectile);
 
       Projectile.LaunchSolution solution =
           projectile.solveLaunch(shootPos, getAttackPosition(entity), force, inherited);
@@ -331,7 +333,7 @@ public class Aimbot extends ToggleMod implements PositionRotationManager.Movemen
       RotationState.Local state, EntityPlayerSP player, Projectile projectile, Entity tar) {
     final Vec3d shootPos = Projectile.getEntityShootPos(player);
     final Vec3d inherited = getInheritedMotion();
-    final double force = projectile.getForce(getCharge(player));
+    final double force = getForce(projectile);
 
     Projectile.LaunchSolution solution = solveWithLead(projectile, shootPos, inherited, force, tar);
 

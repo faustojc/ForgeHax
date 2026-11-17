@@ -4,12 +4,8 @@ import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.math.AlignHelper;
 import com.matt.forgehax.util.math.AlignHelper.Align;
 import net.minecraft.client.gui.ScaledResolution;
-import net.minecraftforge.client.event.GuiScreenEvent;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
 public abstract class HudMod extends ToggleMod {
-
-  protected static ScaledResolution scaledRes = new ScaledResolution(MC);
 
   protected final Setting<Align> alignment;
   protected final Setting<Integer> offsetX;
@@ -64,21 +60,17 @@ public abstract class HudMod extends ToggleMod {
 
   protected abstract double getDefaultScale();
 
-  // no need to recalc each frame but okay (on GuiScale and Settings change only)
   public final int getPosX(int extraOffset) {
     final int align = alignment.get().ordinal();
     final int dirSignX = AlignHelper.getFlowDirX2(align);
-    return (extraOffset + offsetX.get()) * dirSignX + AlignHelper.alignH(scaledRes.getScaledWidth(), align);
+    return (extraOffset + offsetX.get()) * dirSignX
+        + AlignHelper.alignH(new ScaledResolution(MC).getScaledWidth(), align);
   }
 
   public final int getPosY(int extraOffset) {
     final int align = alignment.get().ordinal();
     final int dirSignY = AlignHelper.getFlowDirY2(align);
-    return (extraOffset + offsetY.get()) * dirSignY + AlignHelper.alignV(scaledRes.getScaledHeight(), align);
-  }
-
-  @SubscribeEvent
-  public void onScreenUpdated(GuiScreenEvent.InitGuiEvent.Post ev) {
-    scaledRes = new ScaledResolution(MC);
+    return (extraOffset + offsetY.get()) * dirSignY
+        + AlignHelper.alignV(new ScaledResolution(MC).getScaledHeight(), align);
   }
 }

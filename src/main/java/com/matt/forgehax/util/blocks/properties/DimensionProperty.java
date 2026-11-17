@@ -79,6 +79,7 @@ public class DimensionProperty implements IBlockProperty {
         }
       }
     }
+    reader.endArray();
   }
 
   @Override

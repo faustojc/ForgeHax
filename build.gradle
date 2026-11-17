@@ -2,12 +2,11 @@ import org.apache.tools.ant.filters.ReplaceTokens
 
 buildscript {
   repositories {
-    jcenter()
-    maven { url "http://files.minecraftforge.net/maven" }
-    maven { url "https://plugins.gradle.org/m2/" }
+    maven { url = 'https://maven.minecraftforge.net/' }
+    mavenCentral()
   }
   dependencies {
-    classpath 'net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT'
+    classpath 'net.minecraftforge.gradle:ForgeGradle:3.+'
   }
 }
 
@@ -16,11 +15,10 @@ repositories {
   maven { url "https://oss.sonatype.org/content/groups/public/" }
 }
 
-apply plugin: 'java'
+apply plugin: 'net.minecraftforge.gradle'
 apply plugin: 'idea'
-apply plugin: 'net.minecraftforge.gradle.forge'
 
-sourceCompatibility = targetCompatibility = '1.8'
+sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8'
 
 group 'com.matt.forgehax'
 version project.property('forgehax.version')
@@ -38,23 +36,54 @@ sourceSets {
 
   main {
     compileClasspath += schematica_api.output
+    // FML locates mcmod.info next to the classes in dev runs
+    output.resourcesDir = output.classesDirs.singleFile
   }
 }
 
 minecraft {
-  version = project.property('forgehax.forge.version')
-  runDir = "run"
+  mappings channel: project.property('forgehax.mcp.channel'),
+      version: "${project.property('forgehax.mcp.mapping')}-${project.property('forgehax.mcp.version')}"
 
-  // channel_mapping
-  mappings = "${project.property('forgehax.mcp.channel')}_${project.property('forgehax.mcp.mapping')}"
+  runs {
+    client {
+      workingDirectory project.file('run')
+      property 'fml.coreMods.load', 'com.matt.forgehax.asm.ForgeHaxCoreMod'
+    }
+
+    server {
+    }
+  }
+}
+
+configurations {
+  forgeUniversal
 }
 
 dependencies {
+  minecraft "net.minecraftforge:forge:${project.property('forgehax.forge.version')}"
+  forgeUniversal "net.minecraftforge:forge:${project.property('forgehax.forge.version')}:universal"
+
   testCompile group: 'junit', name: 'junit', version: '4.12'
   testCompile group: 'org.mockito', name: 'mockito-core', version: '2.15.0'
 }
 
+// FG 3 builds the dev Forge jar from the unversioned mcp_config 1.12.2, whose merge step lacks
+// "--inject false" (see ForgeGradle#750, MergeTool#12), so the jar carries the MergeTool marker
+// net.minecraftforge.fml.relauncher.Side (extra BUKKIT constant) and FML's NetworkRegistry.newChannel
+// NPEs at startup. Put Forge's real Side.class ahead of it on the run classpath.
+task extractForgeSide(type: Copy) {
+  from { zipTree(configurations.forgeUniversal.singleFile) }
+  include 'net/minecraftforge/fml/relauncher/Side.class'
+  into "$buildDir/forge-side"
+}
 
+afterEvaluate {
+  tasks.matching { it.name in ['runClient', 'runServer'] }.all {
+    dependsOn extractForgeSide
+    classpath = files("$buildDir/forge-side") + classpath
+  }
+}
 
 jar {
   manifest {
@@ -65,17 +94,19 @@ jar {
   }
 }
 
+jar.finalizedBy('reobfJar')
+
 processResources {
   // this will ensure that this task is redone when the versions change.
   inputs.property "version", project.version
-  inputs.property "mcversion", project.minecraft.version
+  inputs.property "mcversion", project.property('forgehax.mc.version')
 
   // replace stuff in mcmod.info, nothing else
   from(sourceSets.main.resources.srcDirs) {
     include 'mcmod.info'
 
     // replace version and mcversion
-    expand 'version': project.version, 'mcversion': project.minecraft.version
+    expand 'version': project.version, 'mcversion': project.property('forgehax.mc.version')
   }
 
   // copy everything else, thats not the mcmod.info
@@ -94,59 +125,3 @@ processResources {
     ]
   }
 }
-
-
-task setGameDir() {
-  // Check if custom gamedir has been passed, if not use default ones per platform
-  if (!project.hasProperty("gameDir")) {
-    if (org.gradle.internal.os.OperatingSystem.current().isWindows()) {
-      project.ext.gameDir = System.getenv("APPDATA") + "/.minecraft"
-    } else if (org.gradle.internal.os.OperatingSystem.current().isMacOsX()) {
-      project.ext.gameDir = System.properties["user.home"] + "/Library/Application Support/minecraft"
-    } else {
-      project.ext.gameDir = System.properties["user.home"] + "/.minecraft"
-    }
-  }
-}
-
-class CopyJarTask extends DefaultTask {
-  @TaskAction
-  protected void exec() {
-    project.copy {
-      final gameDir = project.ext.gameDir;
-      final minecraft = project.minecraft;
-      final modDir = "$gameDir/mods/" + minecraft.version
-
-      // find previous jar (if it exists)
-      final previousJars = project.fileTree(dir: modDir).matching {
-        include project.archivesBaseName + '*'
-      }.files
-
-      // change file name
-      if (previousJars) {
-        // create .backups folder
-        final backupDir = modDir + '/.backups/'
-        project.file(backupDir).mkdirs()
-
-        for (File previousJar : previousJars) {
-          final n = modDir + '/.backups/' + previousJar.getName() + '.bk'
-          def f = project.file(n)
-          def i = 1
-          while (f.exists()) {
-            f = project.file(n + '_' + i)
-            i++
-          }
-          previousJar.renameTo(f)
-        }
-      }
-
-      // copy forgehax jar from libs to forge mod folder
-      from project.jar
-      into "$gameDir/mods/" + minecraft.version
-    }
-  }
-}
-
-task copyJar(type: CopyJarTask, dependsOn: [setGameDir])
-
-build.finalizedBy copyJar

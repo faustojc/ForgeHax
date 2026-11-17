@@ -9,6 +9,7 @@ import com.matt.forgehax.util.mod.BaseMod;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
+import net.minecraft.block.Block;
 import net.minecraft.block.BlockLiquid;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.item.EntityBoat;
@@ -47,7 +48,8 @@ public class Jesus extends ToggleMod {
       for (int z = MathHelper.floor(entity.posZ); z < MathHelper.ceil(entity.posZ); z++) {
         BlockPos pos = new BlockPos(x, MathHelper.floor(y), z);
 
-        if (getWorld().getBlockState(pos).getBlock().isFullBlock(getWorld().getBlockState(pos))) {
+        AxisAlignedBB box = getWorld().getBlockState(pos).getCollisionBoundingBox(getWorld(), pos);
+        if (box != null && box != Block.NULL_AABB) {
           return true;
         }
       }
