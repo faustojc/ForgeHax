@@ -47,7 +47,7 @@ public class BlockEntry implements ISerializableJson, Globals {
   }
 
   public BlockEntry(Block block, int meta, boolean check) throws BlockDoesNotExistException {
-    meta = Math.max(meta, 0);
+    meta = Math.max(meta, -1); // -1 = any state; 0 is a real state id (air), not "unset"
     if (check) {
       BlockOptionHelper.requiresValidBlock(block, meta);
     }

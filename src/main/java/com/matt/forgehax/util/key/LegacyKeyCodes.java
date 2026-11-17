@@ -113,10 +113,14 @@ public class LegacyKeyCodes {
           entry(0x64, GLFW.GLFW_KEY_F13),
           entry(0x65, GLFW.GLFW_KEY_F14),
           entry(0x66, GLFW.GLFW_KEY_F15),
+          entry(0x67, GLFW.GLFW_KEY_F16),
+          entry(0x68, GLFW.GLFW_KEY_F17),
+          entry(0x69, GLFW.GLFW_KEY_F18),
+          entry(0x71, GLFW.GLFW_KEY_F19),
           entry(0x8D, GLFW.GLFW_KEY_KP_EQUAL),
           entry(0x9C, GLFW.GLFW_KEY_KP_ENTER),
           entry(0x9D, GLFW.GLFW_KEY_RIGHT_CONTROL),
-          entry(0xB3, GLFW.GLFW_KEY_KP_DIVIDE),
+          entry(0xB5, GLFW.GLFW_KEY_KP_DIVIDE),
           entry(0xB7, GLFW.GLFW_KEY_PRINT_SCREEN),
           entry(0xB8, GLFW.GLFW_KEY_RIGHT_ALT),
           entry(0xC5, GLFW.GLFW_KEY_PAUSE),
@@ -131,9 +135,22 @@ public class LegacyKeyCodes {
           entry(0xD2, GLFW.GLFW_KEY_INSERT),
           entry(0xD3, GLFW.GLFW_KEY_DELETE),
           entry(0xDB, GLFW.GLFW_KEY_LEFT_SUPER),
-          entry(0xDC, GLFW.GLFW_KEY_RIGHT_SUPER));
+          entry(0xDC, GLFW.GLFW_KEY_RIGHT_SUPER),
+          entry(0xDD, GLFW.GLFW_KEY_MENU));
 
   private LegacyKeyCodes() {
+  }
+
+  /**
+   * Resolves a stored bind value to a GLFW-era code. Unmarked values are LWJGL2 and translated;
+   * marked values are used as-is, except 0..7: GLFW key codes start at 32, so those can only be
+   * mouse button indices written by a build that stored the raw {@code Key.getValue()}.
+   */
+  public static int fromStored(int stored, boolean glfwMarked) {
+    if (!glfwMarked) {
+      return toGlfw(stored);
+    }
+    return stored >= 0 && stored <= GLFW.GLFW_MOUSE_BUTTON_LAST ? stored - 100 : stored;
   }
 
   /**

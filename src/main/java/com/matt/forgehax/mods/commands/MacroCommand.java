@@ -19,6 +19,7 @@ import com.matt.forgehax.util.mod.CommandMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
 import com.matt.forgehax.util.serialization.ISerializableJson;
 import com.matt.forgehax.util.key.BindingHelper;
+import com.matt.forgehax.util.key.LegacyKeyCodes;
 import com.mojang.blaze3d.platform.InputConstants;
 import joptsimple.OptionParser;
 import net.minecraft.client.KeyMapping;
@@ -74,7 +75,7 @@ public class MacroCommand extends CommandMod {
         .forEach(this::executeMacro);
 
     // execute anonymous macros
-    if (event.getAction() != GLFW.GLFW_RELEASE) { // on press
+    if (event.getAction() == GLFW.GLFW_PRESS) { // key-down only, not GLFW repeat
       MACROS
           .stream()
           .filter(MacroEntry::isAnonymous)
@@ -103,6 +104,11 @@ public class MacroCommand extends CommandMod {
   public void onLoad() {
     super.onLoad();
     MACROS.deserializeAll();
+    // rewrite translated entries now, or the next load would translate them a second time
+    if (MACROS.stream().anyMatch(macro -> macro.needsRewrite)) {
+      MACROS.stream().forEach(macro -> macro.needsRewrite = false);
+      MACROS.serialize();
+    }
 
     MACROS
         .builders()
@@ -268,6 +274,8 @@ public class MacroCommand extends CommandMod {
     private int key = InputConstants.UNKNOWN.getValue();
     @Nullable // null if this is an anonymous macro (ie !name.isPresent())
     private transient KeyMapping bind;
+    // set when the key was read from an unmarked (LWJGL2) or buggy entry; see onLoad
+    private transient boolean needsRewrite = false;
 
     public MacroEntry(String name) {
       this.name = name.isEmpty() ? Optional.empty() : Optional.of(name);
@@ -280,7 +288,7 @@ public class MacroCommand extends CommandMod {
     }
 
     public int getKey() {
-      return Optional.ofNullable(bind).map(km -> km.getKey().getValue()).orElse(this.key);
+      return Optional.ofNullable(bind).map(km -> BindingHelper.getCode(km.getKey())).orElse(this.key);
     }
 
     public Optional<String> getName() {
@@ -301,7 +309,8 @@ public class MacroCommand extends CommandMod {
 
     // only done for named macros
     private void registerBind() {
-      KeyMapping bind = new KeyMapping(name.get(), this.getKey(), "Macros");
+      InputConstants.Key bound = BindingHelper.getKey(this.getKey());
+      KeyMapping bind = new KeyMapping(name.get(), bound.getType(), bound.getValue(), "Macros");
       // TODO: listen for key pressed for anonymous macros
       // No more ClientRegistry.registerKeyBinding for dynamic runtime binds (that API now
       // expects static registration via RegisterKeyMappingsEvent); append directly instead,
@@ -316,6 +325,8 @@ public class MacroCommand extends CommandMod {
       writer.beginObject();
       writer.name("key");
       writer.value(getKey());
+      writer.name(LegacyKeyCodes.CODES_KEY);
+      writer.value(LegacyKeyCodes.CODES_GLFW);
 
       writer.name("commands");
       writer.beginArray();
@@ -333,7 +344,12 @@ public class MacroCommand extends CommandMod {
     @Override
     public void deserialize(JsonReader reader) throws IOException {
       JsonObject root = new JsonParser().parse(reader).getAsJsonObject();
-      this.key = root.get("key").getAsInt();
+      // configs written by the 1.12.2 build carry no codes marker and hold LWJGL2 scancodes
+      JsonElement marker = root.get(LegacyKeyCodes.CODES_KEY);
+      boolean glfw = marker != null && LegacyKeyCodes.CODES_GLFW.equals(marker.getAsString());
+      int stored = root.get("key").getAsInt();
+      this.key = LegacyKeyCodes.fromStored(stored, glfw);
+      this.needsRewrite = !glfw || this.key != stored;
 
       Streams.stream(root.get("commands").getAsJsonArray())
              .map(JsonElement::getAsJsonArray)

@@ -8,6 +8,8 @@ import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
 import net.minecraft.client.gui.screens.DisconnectedScreen;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
@@ -55,9 +57,12 @@ public class ReauthService extends ToggleMod {
   @SubscribeEvent
   public void guiOpen(final ScreenEvent.Opening event) {
     if (event.getNewScreen() instanceof DisconnectedScreen) {
-      final String disconnectMsg = getDisconnectedMsg((DisconnectedScreen) event.getNewScreen());
+      final Component reason = ((DisconnectedScreenAccessor) event.getNewScreen()).getReason();
 
-      if (disconnectMsg.contains("Failed to login")) {
+      // ClientHandshakePacketListenerImpl.authenticateServer builds this reason as
+      // Component.translatable("disconnect.loginFailedInfo", ...) ("Failed to log in: %s").
+      if (reason.getContents() instanceof TranslatableContents contents
+          && "disconnect.loginFailedInfo".equals(contents.getKey())) {
 
         // Anti auth-spam if there's too many failed attempts
         if (!isSessionValid && !timer.hasTimeElapsed(delay.get())) {
@@ -83,9 +88,5 @@ public class ReauthService extends ToggleMod {
         }
       }
     }
-  }
-
-  private String getDisconnectedMsg(DisconnectedScreen disconnected) {
-    return ((DisconnectedScreenAccessor) disconnected).getReason().getString();
   }
 }

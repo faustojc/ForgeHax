@@ -1,7 +1,6 @@
 package com.matt.forgehax.asm;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.matt.forgehax.asm.TypesMc.Methods;
 import com.matt.forgehax.asm.events.*;
 import com.matt.forgehax.asm.events.EntityBlockSlipApplyEvent.Stage;
@@ -37,14 +36,14 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.eventbus.api.Event;
 
-import java.nio.ByteOrder;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
 public class ForgeHaxHooks implements ASMCommon {
 
-  public static final Set<Class<? extends Block>> LIST_BLOCK_FILTER = Sets.newHashSet();
+  public static final Set<Class<? extends Block>> LIST_BLOCK_FILTER =
+      java.util.concurrent.ConcurrentHashMap.newKeySet(); // read by the server thread, written on toggle
   public static final MultiBoolean SHOULD_DISABLE_CAVE_CULLING = new MultiBoolean();
   private static final List<HookReporter> ALL_REPORTERS = Lists.newArrayList();
   /**
@@ -142,32 +141,6 @@ public class ForgeHaxHooks implements ASMCommon {
           .forgeEvent(ApplyCollisionMotionEvent.class)
           .build();
   /**
-   * onPutColorMultiplier
-   */
-  public static final HookReporter HOOK_onPutColorMultiplier =
-      newHookReporter()
-          .hook("onPutColorMultiplier")
-          .dependsOn(TypesMc.Methods.BufferBuilder_putColorMultiplier)
-          .build();
-  /**
-   * onPreRenderBlockLayer
-   */
-  public static final HookReporter HOOK_onPreRenderBlockLayer =
-      newHookReporter()
-          .hook("onPreRenderBlockLayer")
-          .dependsOn(TypesMc.Methods.RenderGlobal_renderBlockLayer)
-          .forgeEvent(RenderBlockLayerEvent.Pre.class)
-          .build();
-  /**
-   * onPostRenderBlockLayer
-   */
-  public static final HookReporter HOOK_onPostRenderBlockLayer =
-      newHookReporter()
-          .hook("onPostRenderBlockLayer")
-          .dependsOn(TypesMc.Methods.RenderGlobal_renderBlockLayer)
-          .forgeEvent(RenderBlockLayerEvent.Post.class)
-          .build();
-  /**
    * onSetupTerrain
    */
   public static final HookReporter HOOK_onSetupTerrain =
@@ -186,15 +159,6 @@ public class ForgeHaxHooks implements ASMCommon {
           .forgeEvent(ComputeVisibilityEvent.class)
           .build();
   /**
-   * onDoBlockCollisions
-   */
-  public static final HookReporter HOOK_onDoBlockCollisions =
-      newHookReporter()
-          .hook("onDoBlockCollisions")
-          // no hook exists anymore
-          .forgeEvent(DoBlockCollisionsEvent.class)
-          .build();
-  /**
    * isBlockFiltered
    */
   public static final HookReporter HOOK_isBlockFiltered =
@@ -210,15 +174,6 @@ public class ForgeHaxHooks implements ASMCommon {
           .hook("onApplyClimbableBlockMovement")
           // no hook exists
           .forgeEvent(ApplyClimbableBlockMovement.class)
-          .build();
-  /**
-   * onRenderBlockInLayer
-   */
-  public static final HookReporter HOOK_onRenderBlockInLayer =
-      newHookReporter()
-          .hook("onRenderBlockInLayer")
-          .dependsOn(TypesMc.Methods.Block_canRenderInLayer)
-          .forgeEvent(RenderBlockInLayerEvent.class)
           .build();
   /**
    * onBlockRender
@@ -421,8 +376,6 @@ public class ForgeHaxHooks implements ASMCommon {
   public static boolean isBoatSetYawActivated = false;
   public static boolean isNotRowingBoatActivated = false;
   public static boolean doIncreaseTabListSize = false;
-  public static boolean SHOULD_UPDATE_ALPHA = false;
-  public static float COLOR_MULTIPLIER_ALPHA = 150.f / 255.f;
 
   public static List<HookReporter> getReporters() {
     return Collections.unmodifiableList(ALL_REPORTERS);
@@ -512,37 +465,6 @@ public class ForgeHaxHooks implements ASMCommon {
         new ApplyCollisionMotionEvent(entity, collidedWithEntity, x, 0.D, z));
   }
 
-  public static int onPutColorMultiplier(float r, float g, float b, int buffer, boolean[] flag) {
-    flag[0] = SHOULD_UPDATE_ALPHA;
-    if (HOOK_onPutColorMultiplier.reportHook() && SHOULD_UPDATE_ALPHA) {
-      if (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN) {
-        int red = (int) ((float) (buffer & 255) * r);
-        int green = (int) ((float) (buffer >> 8 & 255) * g);
-        int blue = (int) ((float) (buffer >> 16 & 255) * b);
-        int alpha = (int) (((float) (buffer >> 24 & 255) * COLOR_MULTIPLIER_ALPHA));
-        buffer = alpha << 24 | blue << 16 | green << 8 | red;
-      } else {
-        int red = (int) ((float) (buffer >> 24 & 255) * r);
-        int green = (int) ((float) (buffer >> 16 & 255) * g);
-        int blue = (int) ((float) (buffer >> 8 & 255) * b);
-        int alpha = (int) (((float) (buffer & 255) * COLOR_MULTIPLIER_ALPHA));
-        buffer = red << 24 | green << 16 | blue << 8 | alpha;
-      }
-    }
-    return buffer;
-  }
-
-  public static boolean onPreRenderBlockLayer(RenderType layer, double partialTicks) {
-    return HOOK_onPreRenderBlockLayer.reportHook()
-        && MinecraftForge.EVENT_BUS.post(new RenderBlockLayerEvent.Pre(layer, partialTicks));
-  }
-
-  public static void onPostRenderBlockLayer(RenderType layer, double partialTicks) {
-    if (HOOK_onPostRenderBlockLayer.reportHook()) {
-      MinecraftForge.EVENT_BUS.post(new RenderBlockLayerEvent.Post(layer, partialTicks));
-    }
-  }
-
   public static boolean onSetupTerrain(Entity renderEntity, boolean playerSpectator) {
     if (HOOK_onSetupTerrain.reportHook()) {
       SetupTerrainEvent event = new SetupTerrainEvent(renderEntity, playerSpectator);
@@ -560,34 +482,31 @@ public class ForgeHaxHooks implements ASMCommon {
     }
   }
 
-  @Deprecated
-  public static boolean onDoBlockCollisions(Entity entity, BlockPos pos, BlockState state) {
-    return HOOK_onDoBlockCollisions.reportHook()
-        && MinecraftForge.EVENT_BUS.post(new DoBlockCollisionsEvent(entity, pos, state));
-  }
-
   public static boolean isBlockFiltered(Entity entity, BlockState state) {
     return HOOK_isBlockFiltered.reportHook()
         && entity instanceof Player
         && LIST_BLOCK_FILTER.contains(state.getBlock().getClass());
   }
 
+  /**
+   * Called in place of Block#getSpeedFactor inside Entity#getBlockSpeedFactor (soul sand and honey
+   * both slow through it); only blocks in {@link #LIST_BLOCK_FILTER} are exempted.
+   */
+  public static float getBlockSpeedFactor(Entity entity, Block block) {
+    return isBlockFiltered(entity, block.defaultBlockState()) ? 1.0F : block.getSpeedFactor();
+  }
+
+  /**
+   * Called in place of LocalPlayer#isUsingItem for the item-use movement slowdown in aiStep.
+   */
+  public static boolean isItemUseSlowdown(LocalPlayer player) {
+    return !isNoSlowDownActivated && player.isUsingItem();
+  }
+
   @Deprecated
   public static boolean onApplyClimbableBlockMovement(LivingEntity livingBase) {
     return HOOK_onApplyClimbableBlockMovement.reportHook()
         && MinecraftForge.EVENT_BUS.post(new ApplyClimbableBlockMovement(livingBase));
-  }
-
-  public static RenderType onRenderBlockInLayer(
-      Block block, BlockState state, RenderType layer, RenderType compareToLayer) {
-    if (HOOK_onRenderBlockInLayer.reportHook()) {
-      RenderBlockInLayerEvent event =
-          new RenderBlockInLayerEvent(block, state, layer, compareToLayer);
-      MinecraftForge.EVENT_BUS.post(event);
-      return event.getLayer();
-    } else {
-      return layer;
-    }
   }
 
   @Deprecated

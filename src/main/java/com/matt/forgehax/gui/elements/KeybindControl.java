@@ -23,7 +23,8 @@ public final class KeybindControl {
   }
 
   public int getKeyCode() {
-    return isAvailable() ? command.getBind().getKey().getValue() : InputConstants.UNKNOWN.getValue();
+    return isAvailable() ? BindingHelper.getCode(command.getBind().getKey())
+        : InputConstants.UNKNOWN.getValue();
   }
 
   public String getDisplayName() {

@@ -1,8 +1,6 @@
 package com.matt.forgehax;
 
-import com.matt.forgehax.events.listeners.WorldListener;
 import com.matt.forgehax.util.mod.BaseMod;
-import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
@@ -26,7 +24,6 @@ public class ForgeHax {
   }
 
   public ForgeHax(FMLJavaModLoadingContext context) {
-    MinecraftForge.EVENT_BUS.register(new WorldListener());
     context.getModEventBus().addListener(this::clientSetup);
   }
 

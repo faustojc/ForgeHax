@@ -101,7 +101,8 @@ public class CommandStub extends Command implements IKeyBind, ISerializableJson 
     writer.beginObject();
 
     writer.name("bind");
-    writer.value(bind != null ? bind.getKey().getValue() : InputConstants.UNKNOWN.getValue());
+    writer.value(
+        bind != null ? BindingHelper.getCode(bind.getKey()) : InputConstants.UNKNOWN.getValue());
     writer.name(LegacyKeyCodes.CODES_KEY);
     writer.value(LegacyKeyCodes.CODES_GLFW);
 
@@ -126,8 +127,10 @@ public class CommandStub extends Command implements IKeyBind, ISerializableJson 
     }
 
     if (bind != null) {
-      bind(glfw ? kc : LegacyKeyCodes.toGlfw(kc));
-      bindNeedsRewrite = !glfw;
+      int code = LegacyKeyCodes.fromStored(kc, glfw);
+      bind(code);
+      // also rewrite recovered mouse binds that the old build stored as a bare button index
+      bindNeedsRewrite = !glfw || code != kc;
     }
 
     reader.endObject();

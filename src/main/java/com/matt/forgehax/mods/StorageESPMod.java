@@ -9,7 +9,6 @@ import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
 import com.matt.forgehax.util.tesselation.GeometryMasks;
-import com.matt.forgehax.util.tesselation.GeometryTessellator;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.decoration.ItemFrame;
@@ -195,9 +194,9 @@ public class StorageESPMod extends ToggleMod {
     cache.forEachNearby(
         getLocalPlayer().blockPosition(),
         distance.get(),
-        (pos, color) ->
-            GeometryTessellator.drawCuboid(
-                event.getBuffer(), pos, GeometryMasks.Line.ALL, color)
+        // Instance drawCuboid applies the pose stack and the camera-relative translation set by
+        // RenderEvent; the static overload writes raw world coordinates.
+        (pos, color) -> event.getTessellator().drawCuboid(pos, GeometryMasks.Line.ALL, color)
     );
 
     double distanceSquared = (double) distance.get() * distance.get();
@@ -207,8 +206,7 @@ public class StorageESPMod extends ToggleMod {
           && color != -1
           && entity.distanceToSqr(getLocalPlayer()) <= distanceSquared) {
         BlockPos pos = entity.blockPosition();
-        GeometryTessellator.drawCuboid(
-            event.getBuffer(),
+        event.getTessellator().drawCuboid(
             entity instanceof ItemFrame ? pos.below() : pos,
             GeometryMasks.Line.ALL,
             color

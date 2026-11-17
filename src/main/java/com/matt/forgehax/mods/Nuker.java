@@ -26,7 +26,7 @@ import net.minecraft.network.protocol.game.ServerboundSwingPacket;
 import net.minecraft.world.InteractionHand;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.world.level.block.LiquidBlock;
-import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import org.lwjgl.glfw.GLFW;
@@ -192,14 +192,14 @@ public class Nuker extends ToggleMod implements PositionRotationManager.Movement
   public void onUpdate(LocalPlayerUpdateEvent event) {
     if (bindSelect.isDown() && attackToggle.compareAndSet(false, true)) {
       UniqueBlock info = null;
-      HitResult tr = LocalPlayerUtils.getMouseOverBlockTrace();
+      BlockHitResult tr = LocalPlayerUtils.getMouseOverBlockTrace();
 
       if (tr == null && !targets.isEmpty()) {
         UniqueBlock ub = targets.remove(targets.size() - 1);
         printInform("Removed latest block %s", ub.toString());
         return;
       } else if (tr != null) {
-        info = BlockHelper.newUniqueBlock(BlockPos.containing(tr.getLocation()));
+        info = BlockHelper.newUniqueBlock(tr.getBlockPos());
       }
 
       if (info == null) {

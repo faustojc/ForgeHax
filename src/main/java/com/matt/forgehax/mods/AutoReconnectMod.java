@@ -78,8 +78,11 @@ public class AutoReconnectMod extends ToggleMod {
     if (!hasAutoLogged && event.getScreen() instanceof DisconnectedScreen) {
       updateLastConnectedServer();
       if (getLastConnectedServerData() != null) {
-        activeScreen = (DisconnectedScreen) event.getScreen();
-        reconnectTime = System.currentTimeMillis() + (long) (delay.get() * 1000);
+        // A window resize re-inits the same screen instance; only a new screen starts a countdown.
+        if (event.getScreen() != activeScreen) {
+          activeScreen = (DisconnectedScreen) event.getScreen();
+          reconnectTime = System.currentTimeMillis() + (long) (delay.get() * 1000);
+        }
         reconnectButton =
             Button.builder(Component.literal(getFormattedReconnectText()), btn -> reconnect())
                   .bounds(

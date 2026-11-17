@@ -110,16 +110,17 @@ public class LocalPlayerUtils implements Globals {
     return MC.hitResult;
   }
 
-  public static HitResult getMouseOverBlockTrace() {
-    if (MC.hitResult == null || getWorld() == null) {
+  /**
+   * The crosshair trace if it is on a block: a BLOCK hit, or a miss whose block position is not
+   * air. An entity hit is never a block trace.
+   */
+  public static BlockHitResult getMouseOverBlockTrace() {
+    if (!(MC.hitResult instanceof BlockHitResult tr) || getWorld() == null) {
       return null;
     }
-    return MC.hitResult.getType() == HitResult.Type.BLOCK
-        ? MC.hitResult
-        : Optional.of(MC.hitResult)
-            .filter(tr -> tr.getLocation() != null)
-            .filter(tr -> !getWorld().getBlockState(BlockPos.containing(tr.getLocation())).isAir())
-            .orElse(null);
+    return tr.getType() == HitResult.Type.BLOCK || !getWorld().getBlockState(tr.getBlockPos()).isAir()
+        ? tr
+        : null;
   }
 
   public static HitResult getViewTrace(
@@ -129,6 +130,9 @@ public class LocalPlayerUtils implements Globals {
     }
 
     Vec3 eyes = entity.getEyePosition(partialTicks);
+    // pick() never returns null: with no block in reach it is a MISS at the far point, whose
+    // distance is ~reach, exactly what 1.12.2's Entity#rayTrace(returnLastUncollidableBlock) gave
+    // and what GameRenderer#pick still uses. So only reach, not reachAttack, bounds the entities.
     HitResult trace = entity.pick(reach, partialTicks, false);
     Vec3 lookDir = eyes.add(direction.scale(reach));
 
@@ -157,7 +161,7 @@ public class LocalPlayerUtils implements Globals {
         Vec3 hit = clip.get();
         double dist = eyes.distanceTo(hit);
         if (dist < hitDistance || hitDistance == 0.D) {
-          if (entity.isPassengerOfSameVehicle(ent)) {
+          if (entity.isPassengerOfSameVehicle(ent) && !ent.canRiderInteract()) {
             if (hitDistance == 0.D) {
               hitEntity = ent;
               hitEntityVec = hit;
@@ -172,7 +176,8 @@ public class LocalPlayerUtils implements Globals {
     }
 
     if (hitEntity != null && reach > 3.D && eyes.distanceTo(hitEntityVec) > 3.D) {
-      return new BlockHitResult(hitEntityVec, Direction.UP, BlockPos.containing(hitEntityVec), false);
+      // an entity beyond melee range is reported as a MISS, as the 1.12.2 Type.MISS result was
+      return BlockHitResult.miss(hitEntityVec, Direction.UP, BlockPos.containing(hitEntityVec));
     } else if (hitEntity != null && trace == null && hitDistance < reachAttack) {
       return new EntityHitResult(hitEntity, hitEntityVec);
     } else {

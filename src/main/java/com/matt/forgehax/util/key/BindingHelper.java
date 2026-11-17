@@ -33,6 +33,15 @@ public class BindingHelper {
         : InputConstants.Type.KEYSYM.getOrCreate(code);
   }
 
+  /**
+   * Inverse of {@link #getKey(int)}: the code to store for an input. Mouse buttons are written in
+   * the -100 based encoding; a raw {@code getValue()} would be the bare button index (0/1/2) and
+   * reload as a keyboard key.
+   */
+  public static int getCode(InputConstants.Key key) {
+    return key.getType() == InputConstants.Type.MOUSE ? key.getValue() - 100 : key.getValue();
+  }
+
   public static String getIndexName(int code) {
     return getKey(code).getDisplayName().getString();
   }

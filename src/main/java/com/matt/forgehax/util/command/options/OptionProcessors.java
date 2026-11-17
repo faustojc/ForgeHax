@@ -34,6 +34,6 @@ public class OptionProcessors {
   }
 
   public static void meta(ExecuteData data) {
-    data.set("meta", SafeConverter.toInteger(data.getOption("meta"), 0));
+    data.set("meta", SafeConverter.toInteger(data.getOption("meta"), -1)); // no --meta: any state
   }
 }

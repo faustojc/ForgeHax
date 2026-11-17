@@ -14,8 +14,10 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.block.BaseFireBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -68,8 +70,11 @@ public class BlockHelper {
   public static boolean isTraceClear(Vec3 start, Vec3 end, Direction targetSide) {
     BlockHitResult tr = getWorld().clip(new ClipContext(
         start, end, ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, getLocalPlayer()));
+    // Clear when nothing is hit, or when the first hit is the target point itself (`end` lies on
+    // the target face) entering through that face. 1.12.2 tested this as "same block cell"; flooring
+    // a coordinate that sits on a cell boundary is ulp-sensitive, so compare the points instead.
     return tr.getType() == HitResult.Type.MISS
-        || (BlockPos.containing(end).equals(tr.getBlockPos())
+        || (tr.getLocation().distanceToSqr(end) < 1.0E-6D
         && targetSide.getOpposite().equals(tr.getDirection()));
   }
 
@@ -88,9 +93,12 @@ public class BlockHelper {
   }
 
   public static boolean isBlockPlaceable(BlockPos pos) {
-    // equivalent of the old Block#canCollideCheck(state, false), which reduced to
-    // "does this state's material block movement"
-    return getWorld().getBlockState(pos).blocksMotion();
+    // 1.12.2 Block#canCollideCheck(state, false) was true for every block except air, fire and
+    // liquids (the BlockAir/BlockFire/BlockLiquid overrides), i.e. also for non-solid blocks such
+    // as torches, flowers, ladders and signs, which blocksMotion() would reject.
+    BlockState state = getWorld().getBlockState(pos);
+    Block block = state.getBlock();
+    return !state.isAir() && !(block instanceof BaseFireBlock) && !(block instanceof LiquidBlock);
   }
 
   private static BlockTraceInfo getPlaceableBlockSideTrace(

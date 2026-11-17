@@ -1,7 +1,6 @@
 package com.matt.forgehax.mixin.accessor;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.Timer;
 import net.minecraft.client.User;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Mutable;
@@ -24,9 +23,6 @@ public interface MinecraftAccessor {
 
   @Accessor("rightClickDelay")
   void setRightClickDelay(int value);
-
-  @Accessor("timer")
-  Timer getTimer();
 
   @Accessor("user")
   @Mutable

@@ -1,14 +1,10 @@
 package com.matt.forgehax.mods;
 
 import com.matt.forgehax.asm.ForgeHaxHooks;
-import com.matt.forgehax.asm.events.DoBlockCollisionsEvent;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
 import com.matt.forgehax.util.mod.loader.RegisterMod;
 import net.minecraft.world.level.block.SoulSandBlock;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-
-import static com.matt.forgehax.Helper.getLocalPlayer;
 
 @RegisterMod
 public class NoSlowdown extends ToggleMod {
@@ -17,6 +13,8 @@ public class NoSlowdown extends ToggleMod {
     super(Category.PLAYER, "NoSlowDown", false, "Disables block slowdown");
   }
 
+  // Both flags are consumed by mixins: MixinEntity (soul sand speed factor, via
+  // ForgeHaxHooks.getBlockSpeedFactor) and MixinLocalPlayer (item-use slowdown in aiStep).
   @Override
   public void onEnabled() {
     ForgeHaxHooks.isNoSlowDownActivated = true;
@@ -32,15 +30,6 @@ public class NoSlowdown extends ToggleMod {
     try {
       ForgeHaxHooks.LIST_BLOCK_FILTER.remove(SoulSandBlock.class);
     } catch (Exception e) {
-    }
-  }
-
-  @SubscribeEvent
-  public void onDoApplyBlockMovement(DoBlockCollisionsEvent event) {
-    if (event.getEntity().equals(getLocalPlayer())) {
-      if (event.getState().getBlock() instanceof SoulSandBlock) {
-        event.setCanceled(true);
-      }
     }
   }
 }

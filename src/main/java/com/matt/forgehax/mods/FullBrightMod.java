@@ -1,5 +1,6 @@
 package com.matt.forgehax.mods;
 
+import com.matt.forgehax.mixin.accessor.OptionInstanceAccessor;
 import com.matt.forgehax.util.command.Setting;
 import com.matt.forgehax.util.mod.Category;
 import com.matt.forgehax.util.mod.ToggleMod;
@@ -27,7 +28,7 @@ public class FullBrightMod extends ToggleMod {
 
   @Override
   public void onEnabled() {
-    MC.options.gamma().set(16D);
+    applyFullBright();
   }
 
   @Override
@@ -37,6 +38,10 @@ public class FullBrightMod extends ToggleMod {
 
   @SubscribeEvent
   public void onClientTick(TickEvent.ClientTickEvent event) {
-    MC.options.gamma().set(16D);
+    applyFullBright();
+  }
+
+  private void applyFullBright() {
+    ((OptionInstanceAccessor) (Object) MC.options.gamma()).setValue(16D);
   }
 }

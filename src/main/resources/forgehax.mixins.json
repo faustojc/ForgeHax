@@ -10,15 +10,14 @@
   "client": [
     "MixinBlockCollisions",
     "MixinConnection",
-    "MixinItemBlockRenderTypes",
-    "MixinLevelRenderer",
+    "MixinEntity",
     "MixinLocalPlayer",
     "MixinMinecraft",
     "MixinMultiPlayerGameMode",
     "accessor.BlockItemInvoker",
     "accessor.DisconnectedScreenAccessor",
     "accessor.MinecraftAccessor",
-    "accessor.TimerAccessor"
+    "accessor.OptionInstanceAccessor"
   ],
   "mixins": []
 }

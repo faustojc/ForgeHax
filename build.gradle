@@ -29,7 +29,7 @@ def coreMods = [
     'ChamsMod', 'CoordsHud', 'Criticals', 'ESP', 'FlyMod', 'FreecamMod',
     'FullBrightMod', 'ItemESP', 'Jesus', 'KillAura', 'NoFallMod', 'NoSlowdown',
     'NoclipMod', 'Nuker', 'SafeWalkMod', 'Scaffold', 'StepMod', 'StorageESPMod',
-    'Targets', 'TimerMod', 'Tracers', 'XrayMod'
+    'Targets', 'Tracers'
 ]
 
 sourceSets.main.java {
